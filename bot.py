@@ -47,6 +47,7 @@ async def play(ctx, search: str):
     if not voice_client.is_playing():
         # if there is no song playing, play the requested song immediately
         voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS))
+        print(f'Playing {search}!')
         await ctx.send(f'Playing {search}!')
     else:
         queue.append(url)
