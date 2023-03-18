@@ -13,10 +13,14 @@ token = os.getenv("token")
 bot = commands.Bot()
 
 queue = []
+queue_titles = []
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5','options': '-vn'}
-
-@bot.slash_command(name="play", guild_ids=['759520511553830913', '729233019034009680']) #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
+guild_ids=['759520511553830913', '729233019034009680', '698704305636769844']
+@bot.slash_command(name="play", guild_ids=guild_ids) #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
 async def play(ctx, search: str):
+    global queue
+    global queue_titles
+
     voice_channel = ctx.author.voice.channel
     voice_client = ctx.voice_client
     if ctx.voice_client is None:
@@ -43,35 +47,55 @@ async def play(ctx, search: str):
     }
 
     url = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['url']
+    title = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['title']
 
-    if not voice_client.is_playing():
-        # if there is no song playing, play the requested song immediately
-        voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS))
-        print(f'Playing {search}!')
-        await ctx.send(f'Playing {search}!')
+    queue.append((url, title))
+    queue_titles.append(title)
+    if len(queue) == 1 and not voice_client.is_playing():
+        # If there is only one song in the queue and no song is playing, play the song immediately
+        voice_client.play(discord.FFmpegPCMAudio(queue[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+        await ctx.send(f'Playing {queue[0][1]}!')
     else:
-        queue.append(url)
-        await ctx.send(f'Added {search} to the queue!')
-    
-    # await ctx.send(f'Playing {search}!')
+        await ctx.send(f'Added {title} to the queue!')
+        
 
-@bot.slash_command(name="queue", guild_ids=['759520511553830913', '729233019034009680'])
+def play_next(ctx):
+    global queue
+    global queue_titles
+    if len(queue) > 0:
+        # if there are songs in the queue, play the next one
+        queue.pop(0)
+        queue_titles.pop(0)
+        if len(queue) > 0:
+            ctx.voice_client.play(discord.FFmpegPCMAudio(queue[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+            ctx.send(f'Skipping to the next song in the queue.')
+        else:
+            ctx.send('No more songs in the queue.')
+    else:
+        ctx.voice_client.disconnect()
+        ctx.send('Disconnected from the voice channel.')
+
+@bot.slash_command(name="queue", guild_ids=guild_ids)
 async def show_queue(ctx):
     global queue
+    global queue_titles
     if len(queue) == 0:
         await ctx.send('The queue is currently empty.')
     else:
-        queue_list = '\n'.join([f'{i+1}. {queue[i]}' for i in range(len(queue))])
+        queue_list = '\n'.join([f'{i+1}. {queue_titles[i]}' for i in range(len(queue))])
+        # queue_list = '\n'.join([f'{i+1}. {queue[i]}' for i in range(len(queue))])
         await ctx.send(f'```Queue:\n{queue_list}```')
 
-@bot.slash_command(name="skip", guild_ids=['759520511553830913', '729233019034009680'])
+@bot.slash_command(name="skip", guild_ids=guild_ids)
 async def skip(ctx):
     global queue
+    global queue_titles
     if ctx.voice_client is not None and ctx.voice_client.is_playing():
         ctx.voice_client.stop()
         if len(queue) > 0:
             # if there are songs in the queue, play the next one
             next_song = queue.pop(0)
+            queue_titles.pop(0)
             ctx.voice_client.play(discord.FFmpegPCMAudio(next_song, **FFMPEG_OPTIONS))
             await ctx.send('Skipping to the next song in the queue.')
         else:
@@ -79,14 +103,17 @@ async def skip(ctx):
     else:
         await ctx.send("I'm not currently playing anything.")
 
-@bot.slash_command(name="stop", guild_ids=['759520511553830913', '729233019034009680'])
+@bot.slash_command(name="stop", guild_ids=guild_ids)
 async def stop(ctx):
     global queue
+    global queue_titles
     queue = []
+    queue_titles = []
     if ctx.voice_client is not None:
         await ctx.voice_client.disconnect()
         await ctx.send('Disconnected from the voice channel.')
     else:
         await ctx.send("I'm not currently connected to a voice channel.")
+
 
 bot.run(token)
