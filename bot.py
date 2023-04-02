@@ -10,7 +10,7 @@ load_dotenv()
 token = os.getenv("token")
 
 # intents = discord.Intents.all()
-bot = commands.Bot()
+bot = discord.Bot(command_prefix='!', intents=discord.Intents.all())
 
 queue = []
 queue_titles = []
