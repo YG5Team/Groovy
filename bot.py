@@ -14,13 +14,19 @@ queue = []
 queue_titles = []
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
-# https://www.youtube.com/watch?v=I1wHDY4DGRI
-# https://www.youtube.com/watch?v=I1wHDY4DGRI&ab_channel=s%C3%A4%C3%A4st%C3%B6possupaisti
+
+# needed function to prevent duplicate command calls
+@bot.event
+async def on_message(message):
+    # print(message) Just to debug
+    return message
+
 
 @bot.event
 async def on_ready():
     print('Connected to bot: {}'.format(bot.user.name))
     print('Bot ID: {}'.format(bot.user.id))
+
 
 @bot.command(pass_context=True)
 async def play(ctx, *, content):
