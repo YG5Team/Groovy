@@ -8,33 +8,35 @@ import os
 load_dotenv()
 token = os.getenv("token")
 
-# intents = discord.Intents.all()
-bot = discord.Bot(command_prefix='!', intents=discord.Intents.all())
+bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
 queue = []
 queue_titles = []
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-guild_ids = ['759520511553830913', '729233019034009680', '698704305636769844']
-
 
 # https://www.youtube.com/watch?v=I1wHDY4DGRI
 # https://www.youtube.com/watch?v=I1wHDY4DGRI&ab_channel=s%C3%A4%C3%A4st%C3%B6possupaisti
 
-@bot.slash_command(name="play",
-                   guild_ids=guild_ids)  # Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
-async def play(ctx, search=None):
+@bot.event
+async def on_ready():
+    print('Connected to bot: {}'.format(bot.user.name))
+    print('Bot ID: {}'.format(bot.user.id))
+
+@bot.command(pass_context=True)
+async def play(ctx, *, content):
     global queue
     global queue_titles
 
-    if isinstance(search, str):
-        voice_channel = ctx.author.voice.channel
-        voice_client = ctx.voice_client
-        if ctx.voice_client is None:
-            voice_client = await voice_channel.connect()
+    if isinstance(content, str) and len(content) > 0:
+        if (ctx.author.voice):
+            if (not ctx.voice_client):
+                # If the bot is not in a voice channel, join the channel that the user is in
+                channel = ctx.message.author.voice.channel
+                await channel.connect()
         else:
-            await ctx.voice_client.move_to(voice_channel)
+            await ctx.send("You are not in a voice channel")
 
-        videosSearch = VideosSearch(search, limit=1)
+        videosSearch = VideosSearch(content, limit=1)
 
         link = videosSearch.result()['result'][0]['link']
 
@@ -57,9 +59,9 @@ async def play(ctx, search=None):
 
         queue.append((url, title))
         queue_titles.append(title)
-        if len(queue) == 1 and not voice_client.is_playing():
+        if len(queue) == 1 and not ctx.voice_client.is_playing():
             # If there is only one song in the queue and no song is playing, play the song immediately
-            voice_client.play(discord.FFmpegPCMAudio(queue[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+            ctx.voice_client.play(discord.FFmpegPCMAudio(queue[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
             await ctx.send(f'Playing {queue[0][1]}!')
         else:
             await ctx.send(f'Added {title} to the queue!')
@@ -70,7 +72,7 @@ async def play(ctx, search=None):
         await ctx.send("I'm not currently playing anything. Type what you want to play!")
 
 
-@bot.slash_command(name="pause", guild_ids=guild_ids)
+@bot.command(pass_context=True)
 async def pause(ctx):
     if ctx.voice_client is not None and ctx.voice_client.is_playing():
         ctx.voice_client.pause()
@@ -79,7 +81,7 @@ async def pause(ctx):
         await ctx.send("I'm not currently playing anything.")
 
 
-@bot.slash_command(name="resume", guild_ids=guild_ids)
+@bot.command(pass_context=True)
 async def resume(ctx):
     if ctx.voice_client is not None and ctx.voice_client.is_paused():
         ctx.voice_client.resume()
@@ -105,7 +107,7 @@ def play_next(ctx):
         ctx.send('Disconnected from the voice channel.')
 
 
-@bot.slash_command(name="queue", guild_ids=guild_ids)
+@bot.command(pass_context=True)
 async def show_queue(ctx):
     global queue
     global queue_titles
@@ -117,7 +119,7 @@ async def show_queue(ctx):
         await ctx.send(f'```Queue:\n{queue_list}```')
 
 
-@bot.slash_command(name="skip", guild_ids=guild_ids)
+@bot.command(pass_context=True)
 async def skip(ctx):
     global queue
     global queue_titles
@@ -135,7 +137,7 @@ async def skip(ctx):
         await ctx.send("I'm not currently playing anything.")
 
 
-@bot.slash_command(name="stop", guild_ids=guild_ids)
+@bot.command(pass_context=True)
 async def stop(ctx):
     global queue
     global queue_titles
