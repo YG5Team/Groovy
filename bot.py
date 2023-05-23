@@ -120,9 +120,9 @@ async def queue(ctx):
     if len(queue_list) == 0:
         await ctx.send('The queue is currently empty.')
     else:
-        queue_list = '\n'.join([f'{i + 1}. {queue_titles[i]}' for i in range(len(queue_list))])
+        q = '\n'.join([f'{i + 1}. {queue_titles[i]}' for i in range(len(queue_list))])
         # queue_list = '\n'.join([f'{i+1}. {queue[i]}' for i in range(len(queue))])
-        await ctx.send(f'```Queue:\n{queue_list}```')
+        await ctx.send(f'```Queue:\n{q}```')
 
 
 @bot.command(pass_context=True)
