@@ -10,11 +10,11 @@ token = os.getenv("token")
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
-queue = []
+queue_list = []
 queue_titles = []
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
-# This was causing the bot to not join the vc
+
 # # needed function to prevent duplicate command calls
 # @bot.event
 # async def on_message(message):
@@ -30,7 +30,7 @@ async def on_ready():
 
 @bot.command(pass_context=True)
 async def play(ctx, *, content):
-    global queue
+    global queue_list
     global queue_titles
 
     if isinstance(content, str) and len(content) > 0:
@@ -63,12 +63,12 @@ async def play(ctx, *, content):
         url = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['url']
         title = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['title']
 
-        queue.append((url, title))
+        queue_list.append((url, title))
         queue_titles.append(title)
-        if len(queue) == 1 and not ctx.voice_client.is_playing():
+        if len(queue_list) == 1 and not ctx.voice_client.is_playing():
             # If there is only one song in the queue and no song is playing, play the song immediately
-            ctx.voice_client.play(discord.FFmpegPCMAudio(queue[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
-            await ctx.send(f'Playing {queue[0][1]}!')
+            ctx.voice_client.play(discord.FFmpegPCMAudio(queue_list[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+            await ctx.send(f'Playing {queue_list[0][1]}!')
         else:
             await ctx.send(f'Added {title} to the queue!')
     elif ctx.voice_client is not None and ctx.voice_client.is_paused():
@@ -97,14 +97,14 @@ async def resume(ctx):
 
 
 def play_next(ctx):
-    global queue
+    global queue_list
     global queue_titles
-    if len(queue) > 0:
+    if len(queue_list) > 0:
         # if there are songs in the queue, play the next one
-        queue.pop(0)
+        queue_list.pop(0)
         queue_titles.pop(0)
-        if len(queue) > 0:
-            ctx.voice_client.play(discord.FFmpegPCMAudio(queue[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+        if len(queue_list) > 0:
+            ctx.voice_client.play(discord.FFmpegPCMAudio(queue_list[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
             ctx.send(f'Skipping to the next song in the queue.')
         else:
             ctx.send('No more songs in the queue.')
@@ -115,25 +115,25 @@ def play_next(ctx):
 
 @bot.command(pass_context=True)
 async def queue(ctx):
-    global queue
+    global queue_list
     global queue_titles
-    if len(queue) == 0:
+    if len(queue_list) == 0:
         await ctx.send('The queue is currently empty.')
     else:
-        queue_list = '\n'.join([f'{i + 1}. {queue_titles[i]}' for i in range(len(queue))])
+        queue_list = '\n'.join([f'{i + 1}. {queue_titles[i]}' for i in range(len(queue_list))])
         # queue_list = '\n'.join([f'{i+1}. {queue[i]}' for i in range(len(queue))])
         await ctx.send(f'```Queue:\n{queue_list}```')
 
 
 @bot.command(pass_context=True)
 async def skip(ctx):
-    global queue
+    global queue_list
     global queue_titles
     if ctx.voice_client is not None and ctx.voice_client.is_playing():
         ctx.voice_client.stop()
-        if len(queue) > 0:
+        if len(queue_list) > 0:
             # if there are songs in the queue, play the next one
-            next_song = queue.pop(0)
+            next_song = queue_list.pop(0)
             queue_titles.pop(0)
             ctx.voice_client.play(discord.FFmpegPCMAudio(next_song, **FFMPEG_OPTIONS))
             await ctx.send('Skipping to the next song in the queue.')
@@ -145,9 +145,9 @@ async def skip(ctx):
 
 @bot.command(pass_context=True)
 async def stop(ctx):
-    global queue
+    global queue_list
     global queue_titles
-    queue = []
+    queue_list = []
     queue_titles = []
     if ctx.voice_client is not None:
         await ctx.voice_client.disconnect()
