@@ -4,7 +4,6 @@ from youtubesearchpython import VideosSearch
 import yt_dlp
 from dotenv import load_dotenv
 import os
-#alberto arias
 
 load_dotenv()
 token = os.getenv("token")
@@ -15,12 +14,12 @@ queue = []
 queue_titles = []
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
-
-# needed function to prevent duplicate command calls
-@bot.event
-async def on_message(message):
-    # print(message) Just to debug
-    return message
+# This was causing the bot to not join the vc
+# # needed function to prevent duplicate command calls
+# @bot.event
+# async def on_message(message):
+#     # print(message) Just to debug
+#     return message
 
 
 @bot.event
@@ -115,7 +114,7 @@ def play_next(ctx):
 
 
 @bot.command(pass_context=True)
-async def show_queue(ctx):
+async def queue(ctx):
     global queue
     global queue_titles
     if len(queue) == 0:
