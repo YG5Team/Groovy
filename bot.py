@@ -4,6 +4,8 @@ from youtubesearchpython import VideosSearch
 import yt_dlp
 from dotenv import load_dotenv
 import os
+import requests
+import xml.etree.ElementTree as ET
 
 load_dotenv()
 token = os.getenv("token")
@@ -12,6 +14,7 @@ bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
 queue_list = []
 queue_titles = []
+queue_videoID = []
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
 
@@ -32,6 +35,7 @@ async def on_ready():
 async def play(ctx, *, content):
     global queue_list
     global queue_titles
+    global queue_videoID
 
     if isinstance(content, str) and len(content) > 0:
         if (ctx.author.voice):
@@ -62,9 +66,12 @@ async def play(ctx, *, content):
 
         url = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['url']
         title = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['title']
+        videoID = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['id']
 
         queue_list.append((url, title))
         queue_titles.append(title)
+        queue_videoID.append(videoID)
+
         if len(queue_list) == 1 and not ctx.voice_client.is_playing():
             # If there is only one song in the queue and no song is playing, play the song immediately
             ctx.voice_client.play(discord.FFmpegPCMAudio(queue_list[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
@@ -103,6 +110,7 @@ def play_next(ctx):
         # if there are songs in the queue, play the next one
         queue_list.pop(0)
         queue_titles.pop(0)
+        queue_videoID.pop(0)
         if len(queue_list) > 0:
             ctx.voice_client.play(discord.FFmpegPCMAudio(queue_list[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
             ctx.send(f'Skipping to the next song in the queue.')
@@ -121,7 +129,6 @@ async def queue(ctx):
         await ctx.send('The queue is currently empty.')
     else:
         q = '\n'.join([f'{i + 1}. {queue_titles[i]}' for i in range(len(queue_list))])
-        # queue_list = '\n'.join([f'{i+1}. {queue[i]}' for i in range(len(queue))])
         await ctx.send(f'```Queue:\n{q}```')
 
 
@@ -135,6 +142,7 @@ async def skip(ctx):
             # if there are songs in the queue, play the next one
             next_song = queue_list.pop(0)
             queue_titles.pop(0)
+            queue_videoID.pop(0)
             ctx.voice_client.play(discord.FFmpegPCMAudio(next_song, **FFMPEG_OPTIONS))
             await ctx.send('Skipping to the next song in the queue.')
         else:
@@ -149,11 +157,42 @@ async def stop(ctx):
     global queue_titles
     queue_list = []
     queue_titles = []
+    queue_videoID = []
     if ctx.voice_client is not None:
         await ctx.voice_client.disconnect()
         await ctx.send('Disconnected from the voice channel.')
     else:
         await ctx.send("I'm not currently connected to a voice channel.")
+
+def get_lyrics(videoID):
+    url = "https://youtubetranscript.com/?server_vid2=" + videoID
+    r = requests.get(url)
+    return r.text
+
+@bot.command(pass_context=True)
+async def lyrics(ctx):
+    global queue_videoID
+    if len(queue_videoID) == 0:
+        await ctx.send('The queue is currently empty.')
+    else:
+        xml_string = get_lyrics(queue_videoID[0])
+
+        # Parse the XML string
+        root = ET.fromstring(xml_string)
+
+        # Extract text from <text> elements
+        text_elements = root.findall(".//text")
+
+        finalString = ""
+        # Iterate through the text elements and print their text content
+        for text_element in text_elements:
+            # print(text_element.text)
+            finalString += text_element.text + "\n"
+        if len(finalString) > 2000:
+            await ctx.send(f'```Lyrics:\n{finalString[:1800]}```')
+        else:
+        # q = '\n'.join([f'{i + 1}. {queue_titles[i]}' for i in range(len(queue_list))])
+            await ctx.send(f'```Lyrics:\n{finalString}```')
 
 
 bot.run(token)
