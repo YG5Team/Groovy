@@ -7,8 +7,8 @@ import os
 import requests
 import xml.etree.ElementTree as ET
 
-load_dotenv()
-token = os.getenv("token")
+#load_dotenv()
+token = os.environ['TOKEN']
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
