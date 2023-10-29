@@ -1,5 +1,4 @@
-#FROM python:3.9.18
-FROM arm64v8/python:3.9
+FROM python:3.9.18-bookworm
 
 RUN apt-get -y update
 RUN apt-get -y install ffmpeg
