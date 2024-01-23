@@ -6,15 +6,20 @@ from dotenv import load_dotenv
 import os
 import requests
 import xml.etree.ElementTree as ET
+import sys
+from Song import Song
 
-#load_dotenv()
+load_dotenv()
 token = os.environ['TOKEN']
 
-bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
+# get args
+if len(sys.argv) == 2:
+    if sys.argv[1] == "debug":
+        token = os.environ['TOKEN_DEBUG']
 
-queue_list = []
-queue_titles = []
-queue_videoID = []
+bot = commands.Bot(command_prefix='@', intents=discord.Intents.all())
+
+songQueue = []
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
 
@@ -33,9 +38,7 @@ async def on_ready():
 
 @bot.command(pass_context=True)
 async def play(ctx, *, content):
-    global queue_list
-    global queue_titles
-    global queue_videoID
+    global songQueue
 
     if isinstance(content, str) and len(content) > 0:
         if (ctx.author.voice):
@@ -66,16 +69,16 @@ async def play(ctx, *, content):
 
         url = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['url']
         title = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['title']
-        videoID = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['id']
+        id = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['id']
 
-        queue_list.append((url, title))
-        queue_titles.append(title)
-        queue_videoID.append(videoID)
+        song = Song(title, url, id)
 
-        if len(queue_list) == 1 and not ctx.voice_client.is_playing():
+        songQueue.append(song)
+
+        if len(songQueue) == 1 and not ctx.voice_client.is_playing():
             # If there is only one song in the queue and no song is playing, play the song immediately
-            ctx.voice_client.play(discord.FFmpegPCMAudio(queue_list[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
-            await ctx.send(f'Playing {queue_list[0][1]}!')
+            ctx.voice_client.play(discord.FFmpegPCMAudio(songQueue[0].url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+            await ctx.send(f'Playing {songQueue[0].title}!')
         else:
             await ctx.send(f'Added {title} to the queue!')
     elif ctx.voice_client is not None and ctx.voice_client.is_paused():
