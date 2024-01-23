@@ -6,24 +6,21 @@ from dotenv import load_dotenv
 import os
 import requests
 import xml.etree.ElementTree as ET
+import sys
+from Song import Song
 
-#load_dotenv()
+load_dotenv()
 token = os.environ['TOKEN']
-
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
-queue_list = []
-queue_titles = []
-queue_videoID = []
+# get args
+if len(sys.argv) == 2:
+    if sys.argv[1] == "debug":
+        token = os.environ['TOKEN_DEBUG']
+        bot = commands.Bot(command_prefix='@', intents=discord.Intents.all())
+
+songQueue = []
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-
-
-# # needed function to prevent duplicate command calls
-# @bot.event
-# async def on_message(message):
-#     # print(message) Just to debug
-#     return message
-
 
 @bot.event
 async def on_ready():
@@ -33,9 +30,7 @@ async def on_ready():
 
 @bot.command(pass_context=True)
 async def play(ctx, *, content):
-    global queue_list
-    global queue_titles
-    global queue_videoID
+    global songQueue
 
     if isinstance(content, str) and len(content) > 0:
         if (ctx.author.voice):
@@ -45,6 +40,11 @@ async def play(ctx, *, content):
                 await channel.connect()
         else:
             await ctx.send("You are not in a voice channel")
+
+        # check if song is paused
+        if ctx.voice_client is not None and ctx.voice_client.is_paused():
+            ctx.voice_client.resume()
+            await ctx.send('Resume playing track!')
 
         videosSearch = VideosSearch(content, limit=1)
 
@@ -66,16 +66,17 @@ async def play(ctx, *, content):
 
         url = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['url']
         title = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['title']
-        videoID = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['id']
+        id = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['id']
 
-        queue_list.append((url, title))
-        queue_titles.append(title)
-        queue_videoID.append(videoID)
+        song = Song(title, url, id)
 
-        if len(queue_list) == 1 and not ctx.voice_client.is_playing():
+        songQueue.append(song)
+
+        if len(songQueue) == 1 and not ctx.voice_client.is_playing():
+            song = songQueue[0]
             # If there is only one song in the queue and no song is playing, play the song immediately
-            ctx.voice_client.play(discord.FFmpegPCMAudio(queue_list[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
-            await ctx.send(f'Playing {queue_list[0][1]}!')
+            ctx.voice_client.play(discord.FFmpegPCMAudio(song.url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+            await ctx.send(f'Playing {song.title}!')
         else:
             await ctx.send(f'Added {title} to the queue!')
     elif ctx.voice_client is not None and ctx.voice_client.is_paused():
@@ -100,22 +101,16 @@ async def resume(ctx):
         ctx.voice_client.resume()
         await ctx.send('Resume playing track!')
     else:
-        await ctx.send("I'm not currently playing anything.")
+        await ctx.send("Nothing to resume.")
 
 
 def play_next(ctx):
-    global queue_list
-    global queue_titles
-    if len(queue_list) > 0:
+    global songQueue
+    songQueue.pop(0)
+    if len(songQueue) > 0:
         # if there are songs in the queue, play the next one
-        queue_list.pop(0)
-        queue_titles.pop(0)
-        queue_videoID.pop(0)
-        if len(queue_list) > 0:
-            ctx.voice_client.play(discord.FFmpegPCMAudio(queue_list[0][0], **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
-            ctx.send(f'Skipping to the next song in the queue.')
-        else:
-            ctx.send('No more songs in the queue.')
+        song = songQueue[0]
+        ctx.voice_client.play(discord.FFmpegPCMAudio(song.url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
     else:
         ctx.voice_client.disconnect()
         ctx.send('Disconnected from the voice channel.')
@@ -123,27 +118,20 @@ def play_next(ctx):
 
 @bot.command(pass_context=True)
 async def queue(ctx):
-    global queue_list
-    global queue_titles
-    if len(queue_list) == 0:
+    global songQueue
+    if len(songQueue) == 0:
         await ctx.send('The queue is currently empty.')
     else:
-        q = '\n'.join([f'{i + 1}. {queue_titles[i]}' for i in range(len(queue_list))])
+        q = '\n'.join([f'{i + 1}. {songQueue[i].title}' for i in range(len(songQueue))])
         await ctx.send(f'```Queue:\n{q}```')
 
 
 @bot.command(pass_context=True)
 async def skip(ctx):
-    global queue_list
-    global queue_titles
+    global songQueue
     if ctx.voice_client is not None and ctx.voice_client.is_playing():
         ctx.voice_client.stop()
-        if len(queue_list) > 0:
-            # if there are songs in the queue, play the next one
-            next_song = queue_list.pop(0)
-            queue_titles.pop(0)
-            queue_videoID.pop(0)
-            ctx.voice_client.play(discord.FFmpegPCMAudio(next_song, **FFMPEG_OPTIONS))
+        if len(songQueue) > 0:
             await ctx.send('Skipping to the next song in the queue.')
         else:
             await ctx.send('No more songs in the queue.')
@@ -153,12 +141,10 @@ async def skip(ctx):
 
 @bot.command(pass_context=True)
 async def stop(ctx):
-    global queue_list
-    global queue_titles
-    queue_list = []
-    queue_titles = []
-    queue_videoID = []
+    global songQueue
+    
     if ctx.voice_client is not None:
+        songQueue = []
         await ctx.voice_client.disconnect()
         await ctx.send('Disconnected from the voice channel.')
     else:
@@ -171,11 +157,12 @@ def get_lyrics(videoID):
 
 @bot.command(pass_context=True)
 async def lyrics(ctx):
-    global queue_videoID
-    if len(queue_videoID) == 0:
+    global songQueue
+    if len(songQueue) == 0:
         await ctx.send('The queue is currently empty.')
     else:
-        xml_string = get_lyrics(queue_videoID[0])
+        song = songQueue[0]
+        xml_string = get_lyrics(song.id)
 
         # Parse the XML string
         root = ET.fromstring(xml_string)
