@@ -63,11 +63,14 @@ async def play(ctx, *, content):
                 'preferredquality': '192'
             }]
         }
-
-        url = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['url']
-        title = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['title']
-        id = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)['id']
-
+        
+        results = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)
+        url = results['url']
+        print("after url")
+        title = results['title']
+        print("after title")
+        id = results['id']
+        print("after Id")
         song = Song(title, url, id)
 
         songQueue.append(song)
