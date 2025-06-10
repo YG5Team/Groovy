@@ -8,6 +8,7 @@ import requests
 import xml.etree.ElementTree as ET
 import sys
 from Song import Song
+import mysql.connector
 
 load_dotenv()
 token = os.environ['TOKEN']
@@ -40,6 +41,7 @@ async def play(ctx, *, content):
                 await channel.connect()
         else:
             await ctx.send("You are not in a voice channel")
+            return
 
         # check if song is paused
         if ctx.voice_client is not None and ctx.voice_client.is_paused():
@@ -63,7 +65,7 @@ async def play(ctx, *, content):
                 'preferredquality': '192'
             }]
         }
-        
+
         results = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)
         url = results['url']
         print("after url")
@@ -122,6 +124,7 @@ def play_next(ctx):
 @bot.command(pass_context=True)
 async def queue(ctx):
     global songQueue
+    await ctx.send("Bert is gay", tts=True)
     if len(songQueue) == 0:
         await ctx.send('The queue is currently empty.')
     else:
