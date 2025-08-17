@@ -18,6 +18,7 @@ jobs:
           host: ${{ secrets.PI_HOST }}
           username: ${{ secrets.PI_USER }}
           key: ${{ secrets.PI_SSH_KEY }}
+          port: 2222
           script: |
             cd /home/frank/Groovy
             git fetch origin main
