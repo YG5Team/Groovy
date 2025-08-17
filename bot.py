@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from youtubesearchpython import VideosSearch
-import yt_dlp
+import yt_dlp 
 from dotenv import load_dotenv
 import os
 import requests
@@ -81,9 +81,9 @@ async def play(ctx, *, content):
             song = songQueue[0]
             # If there is only one song in the queue and no song is playing, play the song immediately
             ctx.voice_client.play(discord.FFmpegPCMAudio(song.url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
-            await ctx.send(f'Playing {song.title}!')
+            await ctx.send(f'Playing {song.title}! 🎶')
         else:
-            await ctx.send(f'Added {title} to the queue!')
+            await ctx.send(f'Added {title} to the queue! 🎶')
     elif ctx.voice_client is not None and ctx.voice_client.is_paused():
         ctx.voice_client.resume()
         await ctx.send('Resume playing track!')
