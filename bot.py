@@ -83,7 +83,7 @@ async def play(ctx, *, content):
             ctx.voice_client.play(discord.FFmpegPCMAudio(song.url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
             await ctx.send(f'Playing {song.title}! 🎶')
         else:
-            await ctx.send(f'Added {title} to the queue!')
+            await ctx.send(f'Added {title} to the queue! 🎶')
     elif ctx.voice_client is not None and ctx.voice_client.is_paused():
         ctx.voice_client.resume()
         await ctx.send('Resume playing track!')
