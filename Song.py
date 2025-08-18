@@ -3,3 +3,6 @@ class Song:
         self.title = title
         self.url = url
         self.id = id
+
+    def __str__(self):
+        return f'{self.title} {self.url} {self.id}'
