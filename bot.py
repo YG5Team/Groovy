@@ -125,7 +125,7 @@ async def playlist(ctx, *, content = False):
 
     await check_in_voice(ctx)
 
-    content = 'https://www.youtube.com/playlist?list=PLDIoUOhQQPlWt8OpaGG43OjNYuJ2q9jEN'
+    # content = 'https://www.youtube.com/playlist?list=PLDIoUOhQQPlWt8OpaGG43OjNYuJ2q9jEN'
 
     url_template = "https://www.youtube.com/playlist?list="
     if not content:
