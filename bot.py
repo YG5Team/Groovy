@@ -17,7 +17,7 @@ import mysql.connector
 
 load_dotenv()
 
-if os.environ['DEBUG']:
+if os.getenv('DEBUG'):
     token = os.environ['DEBUG_TOKEN']
 else:
     token = os.environ['TOKEN']
