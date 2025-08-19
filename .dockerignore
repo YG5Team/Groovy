@@ -1,5 +1,7 @@
 docker-compose.yml
 Dockerfile
 venv
+.venv
 .dockerignore
 .gitignore
+README.MD
