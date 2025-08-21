@@ -75,12 +75,9 @@ async def check_in_voice(ctx):
         raise RuntimeError('You are not in a voice channel')
 
 
-async def search_song(content, link = False):
-    video_search = await asyncio.to_thread(
-        lambda: VideosSearch(content, limit=1).result()
-    )
+def search_song(content, link = False):
+    video_search = VideosSearch(content, limit=1).result()
     link = video_search['result'][0]['link']
-
     if not link:
         first_result = video_search.result()['result'][0]
         if 'link' in first_result:
@@ -104,9 +101,8 @@ async def search_song(content, link = False):
         }]
     }
 
-    results = await asyncio.to_thread(
-        lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)
-    )
+    results = yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)
+    
     url = results['url']
     title = results['title']
     result_id = results['id']
