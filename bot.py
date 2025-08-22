@@ -1,16 +1,13 @@
-import asyncio
 import traceback
 import discord
 from discord.ext import commands
 from youtubesearchpython import VideosSearch
 import yt_dlp 
 from dotenv import load_dotenv
-import os
 import requests
 import xml.etree.ElementTree as ET
-import sys
 from Song import Song
-import mysql.connector
+from sqlite.database import *
 
 # @TODO: FIX PYTHON PACKAGES SPECIFICALLY DISCORD.PY
 # EITHER USE MAIN BRANCH OF REPO OR WAIT FOR UPDATE OF PACKAGE (MAY NEED TO UPDATE OTHER PACKAGES) https://github.com/Rapptz/discord.py
@@ -36,15 +33,10 @@ FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconne
 
 @bot.event
 async def on_ready():
+    create_db()
     global songQueue
     print('Connected to bot: {}'.format(bot.user.name))
     print('Bot ID: {}'.format(bot.user.id))
-
-@bot.command(pass_context=True)
-async def commands(ctx):
-    print('Help')
-    #TODO: OUTPUT HELP
-    # await ctx.send('Help')
 
 @bot.command(pass_context=True)
 async def join(ctx):
