@@ -3,39 +3,42 @@ import os
 import sys
 import importlib, inspect
 from peewee import *
-import sqlite3
+
+from models import *
 
 logger = logging.getLogger('peewee')
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.DEBUG)
 
-
-sqlite_db = SqliteDatabase('groovy.db', pragmas={
+# Connect or create DB file
+sqlite_db = SqliteDatabase('groovy.sqlite', pragmas={
     'journal_mode': 'wal',  # WAL-mode.
     'cache_size': -64 * 1000,  # 64MB cache.
+    'foreign_keys': 1,
+    'ignore_check_constraints': 0,
     'synchronous': 0})  # Let the OS manage syncing.
 
 def create_db():
-    #@TODO: get all models and place in
-    #Connect or create DB file
-    conn = sqlite3.connect('./sqlite/groovy.db')
-    conn.close()
-
     files = [os.path.join(dirpath, f) for (dirpath, dirnames, filenames) in os.walk('./models') for f in filenames]
-    tables = [];
+    tables = []
     for filename in files:
         if '__pycache__' in filename:
             continue
         filename = filename.replace('.' + os.sep, '').replace(os.sep, '.').replace('.py', '')
         for name, cls in inspect.getmembers(importlib.import_module(filename), inspect.isclass):
-            if cls.__module__ == filename:
+            if cls.__module__ == filename and issubclass(cls, BaseModel) and cls != BaseModel:
                 tables.append(cls)
                 # print([name, cls])
 
     sqlite_db.connect()
-    sqlite_db.create_tables(tables)
-    sys.exit()
 
-class BaseModel(Model):
-    class Meta:
-        database = sqlite_db
+    try:
+        sqlite_db.create_tables(tables)
+        print("Tables created.")
+    except Exception as e:
+        print("Error creating tables:", e)
+
+    print(sqlite_db.get_tables())
+    sqlite_db.commit()
+    sqlite_db.close()
+    sys.exit()

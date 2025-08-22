@@ -1,6 +1,6 @@
-from sqlite.database import *
 from peewee import *
 import datetime
+from models import BaseModel
 
 class Songs(BaseModel):
     id = PrimaryKeyField()

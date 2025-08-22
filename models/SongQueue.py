@@ -1,5 +1,5 @@
-from sqlite.database import *
 from peewee import *
+from models import BaseModel
 
 class SongQueue(BaseModel):
     id = PrimaryKeyField()
