@@ -8,5 +8,5 @@ class Playlists(BaseModel):
     server_id = CharField()
     name = TextField()
     plays_counter = IntegerField(default=0)
-    created_by = ForeignKeyField(Users, backref='playlists')
+    created_by = ForeignKeyField(Users)
     created_at = DateTimeField(default=datetime.datetime.now)

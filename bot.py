@@ -1,3 +1,5 @@
+import datetime
+import logging
 import traceback
 from discord.ext import commands
 import requests
@@ -12,21 +14,62 @@ from bot_helpers import *
 # @ISSUE: https://github.com/Rapptz/discord.py/issues/10207
 
 load_dotenv()
-DEBUG = os.getenv("DEBUG")
+DEBUG = os.getenv("DEBUG") != '0'
 
 if DEBUG:
     print("Debug Mode ON")
+
+    logger = logging.getLogger('peewee')
+    logger.addHandler(logging.StreamHandler())
+    logger.setLevel(logging.DEBUG)
+
     token = os.environ['DEBUG_TOKEN']
     bot = commands.Bot(command_prefix='$', intents=discord.Intents.all())
 else:
     token = os.environ['TOKEN']
     bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
-CURRENT_USER = None
 songQueue = []
+
+def except_hook(exctype, value, traceback):
+    log_error([exctype, value])
+    log_error(traceback)
+    asyncio.get_event_loop().stop()
+    if DEBUG:
+        print('Stopping Bot...')
+        die()
+    else:
+        print('Trigger standard Exception Hook.')
+        sys.__excepthook__(exctype, value, traceback)
+        print('Restarting bot...')
+        # restart script
+        os.execv(sys.executable, ['python'] + sys.argv)
+
+sys.excepthook = except_hook
+
+
+@bot.event
+async def on_command_error(ctx: commands.Context, error: commands.CommandError):
+    error_type = type(error).__name__
+    embed = discord.Embed(title=error_type, color=discord.Color.red())
+    error_data = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+    log_error(error_data)
+    if DEBUG:
+        embed.description = f"Traceback:\n```py\n{error_data[:1000]}\n```"
+        await ctx.send(embed=embed)
+        print('Stopping Bot...')
+        die()
+    else:
+        await ctx.send('❌ An Error has Occurred!💀')
+
+    if ctx.voice_client is not None:
+        await ctx.voice_client.disconnect(force=True)
+
+    # await bot.on_command_error(ctx, error)
 
 @bot.event
 async def on_ready():
+    init_logs()
     create_db()
     global songQueue
     print('Connected to bot: {}'.format(bot.user.name))
@@ -36,19 +79,24 @@ async def on_ready():
 # Dup commands still happening
 @bot.event
 async def on_message(message):
-    global CURRENT_USER
-    command = message.content.split()[0].strip(bot.command_prefix)
+    try:
+        command = message.content.split()[0].strip(bot.command_prefix)
+    except IndexError:
+        print(message.content)
+        return
 
     if message.author.bot:
         return
 
-    if CURRENT_USER is None:
-        CURRENT_USER = establish_user(message.author)
-        command_count, created = CommandCount.get_or_create(command=command, user_id=CURRENT_USER.id , defaults={'counter': 1})
+    if GlobalSettings.CURRENT_USER is None:
+        establish_globals(message.author)
+        command_count, created = CommandCount.get_or_create(command=command, user_id=GlobalSettings.CURRENT_USER.id , defaults={'counter': 1})
         if not created:
             command_count.counter += 1
+            command_count.date_last_action = datetime.now()
             command_count.save()
-        await bot.process_commands(message)
+
+    await bot.process_commands(message)
 
 @bot.command(pass_context=True)
 async def join(ctx):
@@ -66,6 +114,7 @@ async def join(ctx):
         print(e)
     else:
         print("Joined voice channel")
+        init_logs()
 
 async def check_in_voice(ctx):
     if ctx.author.voice:
@@ -120,6 +169,7 @@ async def playlist(ctx, *, content = False):
             }
 
             print(info)
+            die()
             song = search_song(info["title"])
             await add_to_song_queue(ctx, song)
     except:
@@ -129,7 +179,7 @@ async def playlist(ctx, *, content = False):
         await ctx.send("Something went wrong while processing your playlist.")
 
 @bot.command(pass_context=True)
-async def play(ctx, *, content):
+async def play(ctx, *, content = None):
 
     if isinstance(content, str) and len(content) > 0:
         await check_in_voice(ctx)
@@ -139,12 +189,21 @@ async def play(ctx, *, content):
             ctx.voice_client.resume()
             await ctx.send('Resume playing track!')
 
-        song = search_song(content)
-        await add_to_song_queue(ctx, song)
+        song, created = search_song(content)
+
+        if created:
+            await ctx.send(f'Saved 🎶{song.title}🎶 to music library!📖')
+
+        await add_to_song_queue(ctx, song.id)
 
     elif ctx.voice_client is not None and ctx.voice_client.is_paused():
         ctx.voice_client.resume()
         await ctx.send('Resume playing track!')
+    elif SongQueue.queue_length() > 0:
+        await check_in_voice(ctx)
+        if ctx.voice_client is not None:
+            await ctx.send("Starting off where we left off in the Queue!")
+            await play_queue(ctx)
     else:
         await ctx.send("I'm not currently playing anything. Type what you want to play!")
 
@@ -168,10 +227,9 @@ async def resume(ctx):
 
 @bot.command(pass_context=True)
 async def reset(ctx):
-    global songQueue
     await check_in_voice(ctx)
-    songQueue = []
-    await ctx.send('The queue has been cleared.')
+    deleted = SongQueue.clear()
+    await ctx.send('All ' + str(deleted) + ' items deleted from Queue!')
 
 @bot.command(pass_context=True)
 async def shuffle(ctx):
@@ -179,24 +237,25 @@ async def shuffle(ctx):
     global songQueue
     await check_in_voice(ctx)
     random.shuffle(songQueue)
-    await ctx.send('The queue has been shuffled.')
+    await ctx.send('The Queue has been shuffled.')
 
 @bot.command(pass_context=True)
 async def queue(ctx):
-    global songQueue
-    if len(songQueue) == 0:
-        await ctx.send('The queue is currently empty.')
+    if SongQueue.queue_length() == 0:
+        await ctx.send('The Queue is currently empty.')
     else:
-        q = '\n'.join([f'{i + 1}. {songQueue[i].title}' for i in range(len(songQueue))])
-        await ctx.send(f'```Queue:\n{q}```')
+        song_queue = SongQueue.songs_in_queue()
+        output = ''
+        for position, title in song_queue.items():
+            output += f'{str(position)}. {title}\n'
+        await ctx.send(f'```Queue:\n{output}```')
 
 
 @bot.command(pass_context=True)
 async def skip(ctx):
-    global songQueue
     if ctx.voice_client is not None and ctx.voice_client.is_playing():
         ctx.voice_client.stop()
-        if len(songQueue) > 0:
+        if SongQueue.queue_length() > 0:
             await ctx.send('Skipping to the next song in the queue.')
         else:
             await ctx.send('No more songs in the queue.')
@@ -206,10 +265,8 @@ async def skip(ctx):
 
 @bot.command(pass_context=True)
 async def stop(ctx):
-    global songQueue
-    
     if ctx.voice_client is not None:
-        songQueue = []
+        SongQueue.clear()
         await ctx.voice_client.disconnect()
         await ctx.send('Disconnected from the voice channel.')
     else:
@@ -222,11 +279,10 @@ def get_lyrics(videoID):
 
 @bot.command(pass_context=True)
 async def lyrics(ctx):
-    global songQueue
-    if len(songQueue) == 0:
+    if SongQueue.queue_length() == 0:
         await ctx.send('The queue is currently empty.')
     else:
-        song = songQueue[0]
+        song = SongQueue.get_last_song()
         xml_string = get_lyrics(song.id)
 
         # Parse the XML string
@@ -251,8 +307,8 @@ async def kys(ctx, name = None):
     user = Users.get(discord_id = ctx.author.id)
 
     if name is None or '@' not in name:
-        discord_id = CURRENT_USER.discord_id
-        if user.discord_id != CURRENT_USER.discord_id:
+        discord_id = GlobalSettings.CURRENT_USER.discord_id
+        if user.discord_id != GlobalSettings.CURRENT_USER.discord_id:
             discord_id = user.discord_id
         name = '@' + str(discord_id)
 

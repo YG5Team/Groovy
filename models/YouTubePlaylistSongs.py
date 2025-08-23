@@ -7,7 +7,7 @@ from .YouTubePlaylists import YouTubePlaylists
 
 class YouTubePlaylistSongs(BaseModel):
     id = PrimaryKeyField()
-    youtube_playlist_id = ForeignKeyField(YouTubePlaylists, backref='youtube_playlist_songs')
-    song_id = ForeignKeyField(Songs, backref='youtube_playlist_songs')
-    created_by = ForeignKeyField(Users, backref='youtube_playlist_songs')
+    youtube_playlist = ForeignKeyField(YouTubePlaylists, backref='youtube_playlist_songs')
+    song = ForeignKeyField(Songs, backref='youtube_playlist_songs')
+    created_by = ForeignKeyField(Users)
     created_at = DateTimeField(default=datetime.datetime.now)

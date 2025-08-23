@@ -8,5 +8,5 @@ class YouTubePlaylists(BaseModel):
     name = TextField()
     url = TextField()
     num_plays = IntegerField(default=0)
-    created_by = ForeignKeyField(Users, backref='youtube_playlists')
+    created_by = ForeignKeyField(Users)
     created_at = DateTimeField(default=datetime.datetime.now)

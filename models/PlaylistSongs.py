@@ -7,7 +7,7 @@ from .Users import Users
 
 class PlaylistSongs(BaseModel):
     id = PrimaryKeyField()
-    playlist_id = ForeignKeyField(Playlists, backref='playlist_songs')
-    song_id = ForeignKeyField(Songs, backref='playlist_songs')
-    created_by = ForeignKeyField(Users, backref='playlist_songs')
+    playlist = ForeignKeyField(Playlists, backref='playlist_songs')
+    song = ForeignKeyField(Songs, backref='playlist_songs')
+    created_by = ForeignKeyField(Users)
     created_at = DateTimeField(default=datetime.datetime.now)

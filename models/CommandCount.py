@@ -5,7 +5,7 @@ from .Users import Users
 
 class CommandCount(BaseModel):
     id = PrimaryKeyField()
-    user_id = ForeignKeyField(Users)
+    user = ForeignKeyField(Users)
     command = CharField()
     counter = IntegerField(default=0)
     created_at = DateTimeField(default=datetime.datetime.now)

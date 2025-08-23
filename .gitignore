@@ -6,6 +6,7 @@
 /__pycache__
 /tmp
 /sqlite/groovy.sqlite*
-**/__pycahe__/
+**/__pycache__/
+*/__pycache__/
 debug.txt
 *.log
