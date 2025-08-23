@@ -1,11 +1,13 @@
 from peewee import *
 import datetime
-from models import BaseModel
+from .BaseModel import BaseModel
+from .Users import Users
 
 class Songs(BaseModel):
     id = PrimaryKeyField()
     title = TextField()
+    search_id = CharField(unique=True)
     url = TextField()
-    num_plays = IntegerField(default=0)
-    created_by = IntegerField(default=0)
+    plays_counter = IntegerField(default=0)
+    created_by = ForeignKeyField(Users, backref='songs')
     created_at = DateTimeField(default=datetime.datetime.now)

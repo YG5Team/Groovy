@@ -1,11 +1,12 @@
 from peewee import *
 import datetime
-from models import BaseModel
+from .BaseModel import BaseModel
+from .Users import Users
 
 class YouTubePlaylists(BaseModel):
     id = PrimaryKeyField()
     name = TextField()
     url = TextField()
     num_plays = IntegerField(default=0)
-    created_by = IntegerField(default=0)
+    created_by = ForeignKeyField(Users, backref='youtube_playlists')
     created_at = DateTimeField(default=datetime.datetime.now)

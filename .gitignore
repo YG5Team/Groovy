@@ -5,5 +5,6 @@
 .idea
 /__pycache__
 /tmp
-/sqlite/groovy.sqlite
+/sqlite/groovy.sqlite*
 **/__pycahe__/
+debug.txt
