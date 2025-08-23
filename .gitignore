@@ -8,3 +8,4 @@
 /sqlite/groovy.sqlite*
 **/__pycahe__/
 debug.txt
+*.log
