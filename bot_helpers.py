@@ -72,3 +72,50 @@ async def play_queue(ctx):
         url = song.get_url()
         ctx.voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
         await ctx.send(f'Playing {song.title} from Queue! 🎶')
+
+def search_youtube_playlist(content):
+
+    results = YouTubePlaylists.search(content)
+
+    if isinstance(results, str):
+        return results, None, False
+
+    url = base64_encode(content)
+
+    yt_playlist, created = YouTubePlaylists.get_or_create(search_id=results['id'], defaults={
+        'title': results['title'],
+        'created_by': GlobalSettings.CURRENT_USER.id,
+        'url': url,
+    })
+
+    if not created:
+        yt_playlist.url = url
+        yt_playlist.updated_at = datetime.now()
+        yt_playlist.save()
+
+    return results['entries'], yt_playlist, created
+
+
+async def add_youtube_playlist_to_queue(ctx, yt_playlist, entries):
+
+    for video in entries:
+        if not video:
+            print("ERROR: Unable to get info. Continuing...")
+            continue
+
+        info = {
+            "title": video['title'],
+            'uploader': video['uploader'],
+            "url": video['url'],
+            "playlist": yt_playlist.title
+        }
+
+        song, created = search_song(info["title"])
+
+        link, link_created = YouTubePlaylistSongs.get_or_create(song=song.id,youtube_playlist = yt_playlist.id, defaults = {
+            'created_by': GlobalSettings.CURRENT_USER.id
+        })
+
+        if created:
+            await ctx.send(f'Saved 🎶{song.title}🎶 to music library!📖')
+        await add_to_song_queue(ctx, song.id)

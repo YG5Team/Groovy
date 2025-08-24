@@ -132,29 +132,21 @@ async def playlist(ctx, *, content = False):
 
     await check_in_voice(ctx)
 
-    results = YouTubePlaylists.search(content)
+    content = 'https://www.youtube.com/playlist?list=PLDIoUOhQQPlWt8OpaGG43OjNYuJ2q9jEN'
 
-    if isinstance(results, str):
-        await ctx.send(results)
+    entries, yt_playlist, created = search_youtube_playlist(content)
+
+    if isinstance(yt_playlist, str):
+        await ctx.send(yt_playlist)
     else:
-        print(results)
+        if created:
+            await ctx.send(f'Saved 🎶{yt_playlist.title}🎶 to YouTube Playlist library!📖')
 
-    die()
-    for video in results['entries']:
-        if not video:
-            print("ERROR: Unable to get info. Continuing...")
-            continue
+        await ctx.send(f'Adding songs from YouTube Playlist 🎶{yt_playlist.title}🎶 to Queue!')
+        await add_youtube_playlist_to_queue(ctx, yt_playlist, entries)
+        await ctx.send(f'Finished adding songs from YouTube Playlist 🎶{yt_playlist.title}🎶 to Queue!')
 
-        info = {
-            "title": video['title'],
-            'uploader': video['uploader'],
-            "url": video['url'],
-        }
 
-        print(info)
-        die()
-        song = search_song(info["title"])
-        await add_to_song_queue(ctx, song)
 
 @bot.command(pass_context=True)
 async def play(ctx, *, content = False):
@@ -224,10 +216,10 @@ async def queue(ctx):
         await ctx.send('The Queue is currently empty.')
     else:
         song_queue = SongQueue.songs_in_queue()
-        output = ''
+        await ctx.send(f'```The following are currently in the Queue:```')
         for position, item in song_queue.items():
-            output += f'{str(position)}. [ID: {item["id"]}] {item["title"]}\n'
-        await ctx.send(f'```Queue:\n{output}```')
+            output = f'{str(position)}. [ID: {item["id"]}] {item["title"]}\n'
+            await ctx.send(f'```{output}```')
 
 
 @bot.command(pass_context=True)
@@ -290,6 +282,6 @@ async def kys(ctx, name = None):
             discord_id = user.discord_id
         name = '@' + str(discord_id)
 
-    await ctx.send("☠️💀KILL YOUR SELF " + name + "!!!💀☠️")
+    await ctx.send("☠️💀 KILL YOUR SELF " + name + "!!! 💀☠️")
 
 bot.run(token)

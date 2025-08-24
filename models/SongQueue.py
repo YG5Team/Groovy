@@ -51,13 +51,15 @@ class SongQueue(BaseModel):
 
         return song, play_now
 
+    #Get song at the end of the Queue
     @classmethod
     def get_last_song(cls):
-        return cls.select(cls, Songs).join(Songs).where(cls.server_id == GlobalSettings.CURRENT_SERVER).order_by(-cls.position).get_or_none()
+        return cls.select(cls, Songs).join(Songs).where(cls.server_id == GlobalSettings.CURRENT_SERVER).order_by(+cls.position).get_or_none()
 
+    #Get song at the beginning of the Queue
     @classmethod
     def get_first_song(cls):
-        return cls.select(cls, Songs).join(Songs).where(cls.server_id == GlobalSettings.CURRENT_SERVER).order_by(+cls.position).get_or_none()
+        return cls.select(cls, Songs).join(Songs).where(cls.server_id == GlobalSettings.CURRENT_SERVER).order_by(-cls.position).get_or_none()
 
     @classmethod
     def remove_from_queue(cls, song: int):
