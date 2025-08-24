@@ -23,6 +23,7 @@ class Songs(BaseModel):
     def get_url(self):
         now = datetime.datetime.now()
         if (now - self.updated_at) > datetime.timedelta(hours=2):
+            print('Refreshing Download URL for song: ' + str(self.id))
             results = Songs.search(self.title)
 
             url = base64_encode(results['url'])

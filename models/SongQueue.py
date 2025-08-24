@@ -1,5 +1,6 @@
 from peewee import *
 from helpers import *
+import random
 from .BaseModel import BaseModel
 from .Songs import Songs
 from .Users import Users
@@ -60,16 +61,41 @@ class SongQueue(BaseModel):
 
     @classmethod
     def remove_from_queue(cls, song: int):
-        die()
+        #@TODO: Implementation
+        return
 
     @classmethod
     def get_queue(cls):
-        return cls.select().where(cls.server_id == GlobalSettings.CURRENT_SERVER).order_by(+cls.position).dicts()
+        return cls.select().where(cls.server_id == GlobalSettings.CURRENT_SERVER).order_by(cls.position)
 
     @classmethod
     def songs_in_queue(cls):
         result = {}
         queue = cls.get_queue()
         for song in queue:
-            result[song['position']] = Songs.get_by_id(song['song']).title
+            result[song.position] = {
+                'id' : song.song,
+                'title' : Songs.get_by_id(song.song).title
+            }
+
         return result
+
+    @classmethod
+    def shuffle(cls):
+        current_song = GlobalSettings.CURRENT_SONG
+        if current_song is None:
+            queue_items = cls.get_queue()
+        else:
+            cq = cls.select().where(cls.server_id == GlobalSettings.CURRENT_SERVER, cls.song == current_song.id).order_by(cls.position).get_or_none()
+            queue_items = cls.select().where(cls.server_id == GlobalSettings.CURRENT_SERVER, cls.position != cq.position).order_by(cls.position)
+
+        # Create a list of positions to shuffle
+        positions = [item.position for item in queue_items]
+
+        # Shuffle the list of positions
+        random.shuffle(positions)
+
+        # Update the queue with the new shuffled positions
+        for idx, item in enumerate(queue_items):
+            item.position = positions[idx]
+            item.save()

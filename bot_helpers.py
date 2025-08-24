@@ -41,9 +41,9 @@ async def add_to_song_queue(ctx, song_id: int):
 
     song, play_now = SongQueue.add_to_queue(song_id)
 
+    # If there is only one song in the queue and no song is playing, play the song immediately
     if SongQueue.queue_length() == 1 and not ctx.voice_client.is_playing():
         GlobalSettings.CURRENT_SONG = song
-        # If there is only one song in the queue and no song is playing, play the song immediately
         url = song.get_url()
         ctx.voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
         await ctx.send(f'Playing {song.title}! 🎶')

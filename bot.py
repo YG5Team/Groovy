@@ -132,54 +132,32 @@ async def playlist(ctx, *, content = False):
 
     await check_in_voice(ctx)
 
-    # content = 'https://www.youtube.com/playlist?list=PLDIoUOhQQPlWt8OpaGG43OjNYuJ2q9jEN'
+    results = YouTubePlaylists.search(content)
 
-    url_template = "https://www.youtube.com/playlist?list="
-    if not content:
-        await ctx.send("Please provide a playlist URL: " . format(url_template))
-        return
+    if isinstance(results, str):
+        await ctx.send(results)
+    else:
+        print(results)
 
-    if url_template not in content:
-        await ctx.send(content + " is not a valid youtube playlist URL.")
-        return
+    die()
+    for video in results['entries']:
+        if not video:
+            print("ERROR: Unable to get info. Continuing...")
+            continue
 
-    try:
-        ydl_opts = {
-            'nocheckcertificate': True,
-            "ignoreerrors": True,
-            "quiet": True,
-            "simulate": True,
-            "allow_playlist_files" : False,
-            'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-            'extract_flat': True
+        info = {
+            "title": video['title'],
+            'uploader': video['uploader'],
+            "url": video['url'],
         }
 
-        results = yt_dlp.YoutubeDL(ydl_opts).extract_info(content, download=False)
-        print(results)
+        print(info)
         die()
-        for video in results['entries']:
-            if not video:
-                print("ERROR: Unable to get info. Continuing...")
-                continue
-
-            info = {
-                "title": video['title'],
-                'uploader': video['uploader'],
-                "url": video['url'],
-            }
-
-            print(info)
-            die()
-            song = search_song(info["title"])
-            await add_to_song_queue(ctx, song)
-    except:
-        e = sys.exc_info()[0]
-        print(e)
-        print(traceback.format_exc())
-        await ctx.send("Something went wrong while processing your playlist.")
+        song = search_song(info["title"])
+        await add_to_song_queue(ctx, song)
 
 @bot.command(pass_context=True)
-async def play(ctx, *, content = None):
+async def play(ctx, *, content = False):
 
     if isinstance(content, str) and len(content) > 0:
         await check_in_voice(ctx)
@@ -205,7 +183,7 @@ async def play(ctx, *, content = None):
             await ctx.send("Starting off where we left off in the Queue!")
             await play_queue(ctx)
     else:
-        await ctx.send("I'm not currently playing anything. Type what you want to play!")
+        await ctx.send("I'm not currently playing anything and there is nothing in the Queue. Type what you want to play!")
 
 
 @bot.command(pass_context=True)
@@ -227,17 +205,18 @@ async def resume(ctx):
 
 @bot.command(pass_context=True)
 async def reset(ctx):
-    await check_in_voice(ctx)
-    deleted = SongQueue.clear()
-    await ctx.send('All ' + str(deleted) + ' items deleted from Queue!')
+    if SongQueue.queue_length() > 0:
+        await check_in_voice(ctx)
+        deleted = SongQueue.clear()
+        await ctx.send('All ' + str(deleted) + ' items deleted from Queue!')
+    else:
+        await ctx.send("The Queue is empty. Type what you want to play!")
 
 @bot.command(pass_context=True)
 async def shuffle(ctx):
-    import random
-    global songQueue
     await check_in_voice(ctx)
-    random.shuffle(songQueue)
-    await ctx.send('The Queue has been shuffled.')
+    SongQueue.shuffle()
+    await ctx.send('🎲The Queue has been shuffled.🎲')
 
 @bot.command(pass_context=True)
 async def queue(ctx):
@@ -246,8 +225,8 @@ async def queue(ctx):
     else:
         song_queue = SongQueue.songs_in_queue()
         output = ''
-        for position, title in song_queue.items():
-            output += f'{str(position)}. {title}\n'
+        for position, item in song_queue.items():
+            output += f'{str(position)}. [ID: {item["id"]}] {item["title"]}\n'
         await ctx.send(f'```Queue:\n{output}```')
 
 
@@ -266,7 +245,6 @@ async def skip(ctx):
 @bot.command(pass_context=True)
 async def stop(ctx):
     if ctx.voice_client is not None:
-        SongQueue.clear()
         await ctx.voice_client.disconnect()
         await ctx.send('Disconnected from the voice channel.')
     else:
