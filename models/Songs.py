@@ -27,6 +27,7 @@ class Songs(BaseModel):
             results = Songs.search(self.title)
 
             url = base64_encode(results['url'])
+            self.title = results['title']
             self.url = url
             self.updated_at = datetime.datetime.now()
             self.save()

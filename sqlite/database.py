@@ -18,9 +18,9 @@ def create_db():
 
     try:
         sqlite_db.create_tables(models.creation_order)
+        sqlite_db.commit()
         print("Tables created.")
     except Exception as e:
         raise DataError("Error creating tables:", e)
 
-    sqlite_db.commit()
     sqlite_db.close()

@@ -31,6 +31,7 @@ def search_song(content):
 
     #we have to update the URL as the saved one could be expired
     if not created:
+        song.title = results['title']
         song.url = url
         song.updated_at = datetime.now()
         song.save()
