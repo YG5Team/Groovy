@@ -13,43 +13,10 @@ def establish_globals(author):
     GlobalSettings.CURRENT_SERVER = author.guild.id
     return user
 
-"""
-@FIXME: we need to think of a better way as of now we always have to ping the search
-        and create the video download.
-        Saving the generated URL is pointless. IDK what we should do here.
-"""
-def search_song(content):
-    results = Songs.search(content)
-
-    url = base64_encode(results['url'])
-
-    song, created = Songs.get_or_create(search_id=results['id'], defaults={
-        'title' : results['title'],
-        'created_by': GlobalSettings.CURRENT_USER.id,
-        'url': url,
-    })
-
-    #we have to update the URL as the saved one could be expired
-    if not created:
-        song.title = results['title']
-        song.url = url
-        song.updated_at = datetime.now()
-        song.save()
-
-    return song, created
-
-async def add_to_song_queue(ctx, song_id: int):
-
-    song, play_now = SongQueue.add_to_queue(song_id)
-
-    # If there is only one song in the queue and no song is playing, play the song immediately
-    if SongQueue.queue_length() == 1 and not ctx.voice_client.is_playing():
-        GlobalSettings.CURRENT_SONG = song
-        url = song.get_url()
-        ctx.voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
-        await ctx.send(f'Playing {song.title}! 🎶')
-    else:
-        await ctx.send(f'Added {song.title} to the queue! 🎶')
+def get_discord_tag( discord_id = None ):
+    if isinstance(discord_id, int):
+        return "<@" + str(discord_id) + ">"
+    return"<@" + GlobalSettings.CURRENT_USER.discord_id + ">"
 
 def play_next(ctx):
     SongQueue.pop()
@@ -74,49 +41,26 @@ async def play_queue(ctx):
         ctx.voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
         await ctx.send(f'Playing {song.title} from Queue! 🎶')
 
-def search_youtube_playlist(content):
+async def add_to_song_queue(ctx, song_id: int):
 
-    results = YouTubePlaylists.search(content)
+    song, play_now = SongQueue.add_to_queue(song_id)
 
-    if isinstance(results, str):
-        return results, None, False
+    # If there is only one song in the queue and no song is playing, play the song immediately
+    if SongQueue.queue_length() == 1 and not ctx.voice_client.is_playing():
+        GlobalSettings.CURRENT_SONG = song
+        url = song.get_url()
+        ctx.voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+        await ctx.send(f'Playing {song.title}! 🎶')
+    else:
+        await ctx.send(f'Added {song.title} to the queue! 🎶')
 
-    url = base64_encode(content)
+async def add_youtube_playlist_to_queue(ctx, yt_playlist):
 
-    yt_playlist, created = YouTubePlaylists.get_or_create(search_id=results['id'], defaults={
-        'title': results['title'],
-        'created_by': GlobalSettings.CURRENT_USER.id,
-        'url': url,
-    })
+    yt_playlist.updated_at = datetime.now()
+    yt_playlist.num_plays += 1
+    yt_playlist.save()
 
-    if not created:
-        yt_playlist.url = url
-        yt_playlist.updated_at = datetime.now()
-        yt_playlist.save()
+    songs = yt_playlist.get_songs()
 
-    return results['entries'], yt_playlist, created
-
-
-async def add_youtube_playlist_to_queue(ctx, yt_playlist, entries):
-
-    for video in entries:
-        if not video:
-            print("ERROR: Unable to get info. Continuing...")
-            continue
-
-        info = {
-            "title": video['title'],
-            'uploader': video['uploader'],
-            "url": video['url'],
-            "playlist": yt_playlist.title
-        }
-
-        song, created = search_song(info["title"])
-
-        link, link_created = YouTubePlaylistSongs.get_or_create(song=song.id,youtube_playlist = yt_playlist.id, defaults = {
-            'created_by': GlobalSettings.CURRENT_USER.id
-        })
-
-        if created:
-            await ctx.send(f'Saved 🎶{song.title}🎶 to music library!📖')
-        await add_to_song_queue(ctx, song.id)
+    for song in songs:
+        SongQueue.add_to_queue(song.id)

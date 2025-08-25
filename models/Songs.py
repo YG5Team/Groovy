@@ -67,3 +67,29 @@ class Songs(BaseModel):
             ydl_opts['cachedir'] = False
 
         return yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=False)
+
+    """
+    @FIXME: we need to think of a better way as of now we always have to ping the search
+            and create the video download.
+            Saving the generated URL is pointless. IDK what we should do here.
+    """
+    @classmethod
+    def save_song(cls, content):
+        results = cls.search(content)
+
+        url = base64_encode(results['url'])
+
+        song, created = cls.get_or_create(search_id=results['id'], defaults={
+            'title': results['title'],
+            'created_by': GlobalSettings.CURRENT_USER.id,
+            'url': url,
+        })
+
+        # we have to update the URL as the saved one could be expired
+        if not created:
+            song.title = results['title']
+            song.url = url
+            song.updated_at = datetime.datetime.now()
+            song.save()
+
+        return song, created

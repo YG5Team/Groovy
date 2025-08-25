@@ -9,9 +9,10 @@ from models.CommandCount import CommandCount
 from sqlite.database import *
 from bot_helpers import *
 
-# @TODO: FIX PYTHON PACKAGES SPECIFICALLY DISCORD.PY
-# EITHER USE MAIN BRANCH OF REPO OR WAIT FOR UPDATE OF PACKAGE (MAY NEED TO UPDATE OTHER PACKAGES) https://github.com/Rapptz/discord.py
-# @ISSUE: https://github.com/Rapptz/discord.py/issues/10207
+"""
+@FIXME: ADDING TO QUEUE AND SONG SEARCHING NEED TO BE UPDATED TO A THREAD OR ASYNC
+        TAKE TOO LONG AND PREVENT OTHER COMMANDS
+"""
 
 load_dotenv()
 DEBUG = os.getenv("DEBUG") != '0'
@@ -60,7 +61,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
         print('Stopping Bot...')
         die()
     else:
-        await ctx.send('❌ An Error has Occurred!💀')
+        await ctx.send('❌ An Error has Occurred!💀\n Thanks ' + get_discord_tag() + '...')
 
     if ctx.voice_client is not None:
         await ctx.voice_client.disconnect(force=True)
@@ -80,7 +81,7 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     try:
-        command = message.content.split()[0].strip(bot.command_prefix)
+        input_command = message.content.split()[0].strip(bot.command_prefix)
     except IndexError:
         print(message.content)
         return
@@ -90,11 +91,14 @@ async def on_message(message):
 
     if GlobalSettings.CURRENT_USER is None:
         establish_globals(message.author)
-        command_count, created = CommandCount.get_or_create(command=command, user_id=GlobalSettings.CURRENT_USER.id , defaults={'counter': 1})
-        if not created:
-            command_count.counter += 1
-            command_count.date_last_action = datetime.now()
-            command_count.save()
+        for command in bot.commands:
+            if command.name == input_command:
+                command_count, created = CommandCount.get_or_create(command=input_command, user_id=GlobalSettings.CURRENT_USER.id , defaults={'counter': 1})
+                if not created:
+                    command_count.counter += 1
+                    command_count.date_last_action = datetime.now()
+                    command_count.save()
+                break
 
     await bot.process_commands(message)
 
@@ -116,40 +120,60 @@ async def join(ctx):
         print("Joined voice channel")
         init_logs()
 
-async def check_in_voice(ctx):
+async def check_in_voice(ctx, join = True):
     if ctx.author.voice:
-        if not ctx.voice_client:
+        if not ctx.voice_client and join:
             # If the bot is not in a voice channel, join the channel that the user is in
             channel = ctx.message.author.voice.channel
             await channel.connect()
     else:
-        await ctx.send("You are not in a voice channel")
-        raise RuntimeError('You are not in a voice channel')
+        await ctx.send("You are not in a voice channel. You cannot reset the Queue.")
+        # raise RuntimeError('You are not in a voice channel')
 
 
 @bot.command(pass_context=True)
-async def playlist(ctx, *, content = False):
+async def yt_playlist(ctx, *, content = None):
 
     await check_in_voice(ctx)
 
-    content = 'https://www.youtube.com/playlist?list=PLDIoUOhQQPlWt8OpaGG43OjNYuJ2q9jEN'
+    #For testing purposes. DO NOT UNCOMMENT
+    # content = 'https://www.youtube.com/playlist?list=PLDIoUOhQQPlWt8OpaGG43OjNYuJ2q9jEN'
 
-    entries, yt_playlist, created = search_youtube_playlist(content)
+    is_valid, content = YouTubePlaylists.validate_url(content)
 
-    if isinstance(yt_playlist, str):
-        await ctx.send(yt_playlist)
+    if not is_valid:
+        await ctx.send(content)
+        return
+
+    url = base64_encode(content)
+    new_songs = 0
+    youtube_playlist = YouTubePlaylists.select().where(YouTubePlaylists.url == url).get_or_none()
+
+    if youtube_playlist:
+        created = False
+        if youtube_playlist.expected_num_items != YouTubePlaylistSongs.select().where(YouTubePlaylistSongs.youtube_playlist == youtube_playlist.id).count():
+            new_songs, youtube_playlist, created = YouTubePlaylists.save_youtube_playlist(content)
+    else:
+        new_songs, youtube_playlist, created = YouTubePlaylists.save_youtube_playlist(content)
+
+    if isinstance(youtube_playlist, str):
+        await ctx.send(youtube_playlist)
     else:
         if created:
-            await ctx.send(f'Saved 🎶{yt_playlist.title}🎶 to YouTube Playlist library!📖')
+            await ctx.send(f'Saved 🎶{youtube_playlist.title}🎶 to YouTube Playlist library!📖')
 
-        await ctx.send(f'Adding songs from YouTube Playlist 🎶{yt_playlist.title}🎶 to Queue!')
-        await add_youtube_playlist_to_queue(ctx, yt_playlist, entries)
-        await ctx.send(f'Finished adding songs from YouTube Playlist 🎶{yt_playlist.title}🎶 to Queue!')
+        if new_songs > 0:
+            await ctx.send(f'Saved {new_songs} new song(s) to music library!🎶📖')
+
+        await ctx.send(f'Adding songs from YouTube Playlist 🎶{youtube_playlist.title}🎶 to Queue!')
+        await add_youtube_playlist_to_queue(ctx, youtube_playlist)
+        count = youtube_playlist.song_count()
+        await ctx.send(f'Finished adding {str(count)} songs from YouTube Playlist 🎶{youtube_playlist.title}🎶 to Queue!')
 
 
 
 @bot.command(pass_context=True)
-async def play(ctx, *, content = False):
+async def play(ctx, *, content = None):
 
     if isinstance(content, str) and len(content) > 0:
         await check_in_voice(ctx)
@@ -159,7 +183,7 @@ async def play(ctx, *, content = False):
             ctx.voice_client.resume()
             await ctx.send('Resume playing track!')
 
-        song, created = search_song(content)
+        song, created = Songs.save_song(content)
 
         if created:
             await ctx.send(f'Saved 🎶{song.title}🎶 to music library!📖')
@@ -198,7 +222,7 @@ async def resume(ctx):
 @bot.command(pass_context=True)
 async def reset(ctx):
     if SongQueue.queue_length() > 0:
-        await check_in_voice(ctx)
+        await check_in_voice(ctx, False)
         deleted = SongQueue.clear()
         await ctx.send('All ' + str(deleted) + ' items deleted from Queue!')
     else:
@@ -211,15 +235,24 @@ async def shuffle(ctx):
     await ctx.send('🎲The Queue has been shuffled.🎲')
 
 @bot.command(pass_context=True)
-async def queue(ctx):
+async def queue(ctx, limit = ''):
     if SongQueue.queue_length() == 0:
         await ctx.send('The Queue is currently empty.')
     else:
-        song_queue = SongQueue.songs_in_queue()
-        await ctx.send(f'```The following are currently in the Queue:```')
-        for position, item in song_queue.items():
-            output = f'{str(position)}. [ID: {item["id"]}] {item["title"]}\n'
+        limit_message = ''
+        query = SongQueue.get_queue()
+        if limit.isnumeric():
+            query = query.limit(int(limit))
+            limit_message = f' (FIRST {limit}) '
+
+        await ctx.send(f'```The following are currently in the Queue{limit_message}:```')
+        count = 0
+        for item in query.execute():
+            output = f'{str(item.position)}. [ID: {item.song.id}] {item.song.title}\n'
             await ctx.send(f'```{output}```')
+            count += 1
+            if limit.isnumeric() and count >= int(limit):
+                break
 
 
 @bot.command(pass_context=True)
@@ -252,7 +285,7 @@ async def lyrics(ctx):
     if SongQueue.queue_length() == 0:
         await ctx.send('The queue is currently empty.')
     else:
-        song = SongQueue.get_last_song()
+        song = SongQueue.get_first_song()
         xml_string = get_lyrics(song.id)
 
         # Parse the XML string
@@ -269,19 +302,31 @@ async def lyrics(ctx):
         if len(final_string) > 2000:
             await ctx.send(f'```Lyrics:\n{final_string[:1800]}```')
         else:
-        # q = '\n'.join([f'{i + 1}. {queue_titles[i]}' for i in range(len(queue_list))])
+            # q = '\n'.join([f'{i + 1}. {queue_titles[i]}' for i in range(len(queue_list))])
             await ctx.send(f'```Lyrics:\n{final_string}```')
 
 @bot.command(pass_context=True)
-async def kys(ctx, name = None):
-    user = Users.get(discord_id = ctx.author.id)
+async def kys(ctx, content = None):
+    name = content
+    message = ''
+    if name is not None and '@' not in name:
+        target_user = Users.select(Users.discord_id).where((Users.name == name) | (Users.global_name == name) ).get_or_none()
+        if target_user is not None:
+            name = get_discord_tag(target_user.discord_id)
+        else:
+            message = "I don't know who `" + content + "` is, so...\n"
 
+    author = Users.get(discord_id=ctx.author.id)
     if name is None or '@' not in name:
+        if CommandCount.select().count() == 1:
+            message = 'First Time⁉️\n'
         discord_id = GlobalSettings.CURRENT_USER.discord_id
-        if user.discord_id != GlobalSettings.CURRENT_USER.discord_id:
-            discord_id = user.discord_id
-        name = '@' + str(discord_id)
+        if author.discord_id != GlobalSettings.CURRENT_USER.discord_id:
+            establish_globals(ctx.author)
+            discord_id = author.discord_id
+        name = get_discord_tag(discord_id)
 
-    await ctx.send("☠️💀 KILL YOUR SELF " + name + "!!! 💀☠️")
+    #maybe play emote
+    await ctx.send(message + "☠️💀 KILL YOUR SELF " + name + "!!! 💀☠️")
 
 bot.run(token)
