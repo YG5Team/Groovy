@@ -51,22 +51,27 @@ sys.excepthook = except_hook
 
 @bot.event
 async def on_command_error(ctx: commands.Context, error: commands.CommandError):
+
+    if isinstance(error, commands.CommandNotFound):
+        await ctx.send("Unknown command, type !help for known commands. ")
+        return
+
     error_type = type(error).__name__
     embed = discord.Embed(title=error_type, color=discord.Color.red())
     error_data = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     log_error(error_data)
+
     if DEBUG:
         embed.description = f"Traceback:\n```py\n{error_data[:1000]}\n```"
         await ctx.send(embed=embed)
-        print('Stopping Bot...')
-        die()
+        print('Unknown Command')
+        #die()
     else:
         await ctx.send('❌ An Error has Occurred!💀\n Thanks ' + get_discord_tag() + '...')
 
     if ctx.voice_client is not None:
         await ctx.voice_client.disconnect(force=True)
 
-    # await bot.on_command_error(ctx, error)
 
 @bot.event
 async def on_ready():
