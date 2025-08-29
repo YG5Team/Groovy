@@ -24,5 +24,6 @@ jobs:
             cd /home/frank/Groovy
             git fetch origin main
             git reset --hard origin/main
+            env/bin/pip install -r requirements.txt
             sudo pkill -2 -f bot.py || true
             sudo systemctl restart bot
