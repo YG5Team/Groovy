@@ -1,7 +1,9 @@
 import asyncio
+import inspect
 import os
 import sys
 import base64
+import traceback
 
 from dotenv import load_dotenv
 
@@ -9,11 +11,13 @@ class GlobalSettings:
     CURRENT_USER :object = None
     CURRENT_SONG : object = None
     CURRENT_SERVER : int | None = None
+    LAST_ERROR = None
 
     def __init__(self):
         self.CURRENT_USER = None
         self.CURRENT_SONG = None
         self.CURRENT_SERVER = None
+        self.LAST_ERROR = None
 
 load_dotenv()
 DEBUG = os.getenv("DEBUG") != '0'
@@ -44,9 +48,16 @@ def debug(content, truncate = False):
             f = open(debug_file_name, 'r+')
             f.truncate(0)
         with open(debug_file_name, "a") as file:
-            print(content, file=file)
+            caller = inspect.getframeinfo(inspect.stack()[1][0])
+            current_filename = caller.filename
+            current_line = caller.lineno
+            output = f"Filename: {current_filename}, Line number: {current_line}: {content}"
+            print(output, file=file)
             print('\n', file=file)
-            print(content)
+            print(output)
+
+def format_error(error):
+    return "".join(traceback.format_exception(type(error), error, error.__traceback__))
 
 def log_error(content):
     with open(error_file_name, "a") as file:
