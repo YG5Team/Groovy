@@ -23,9 +23,6 @@ class Songs(BaseModel):
     def get_url(self, increase_counter=False):
         now = datetime.datetime.now()
 
-        if increase_counter:
-            self.plays_counter += 1
-
         if (now - self.updated_at) > datetime.timedelta(hours=2):
             print('Refreshing Download URL for song: ' + str(self.id))
             results = Songs.search(self.title)
