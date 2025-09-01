@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import logging
 import traceback
@@ -5,9 +7,14 @@ from discord.ext import commands
 import requests
 import xml.etree.ElementTree as ET
 
+import os, sys, asyncio, discord
+from typing import Tuple, Optional
+
 from models.CommandCount import CommandCount
-from sqlite.database import *
+from sqlite.database import create_db
 from bot_helpers import *
+from models.Songs import Songs
+
 
 """
 @FIXME: ADDING TO QUEUE AND SONG SEARCHING NEED TO BE UPDATED TO A THREAD OR ASYNC
@@ -16,6 +23,10 @@ from bot_helpers import *
 
 load_dotenv()
 DEBUG = os.getenv("DEBUG") != '0'
+VALID_TOP_ENTITIES = {"songs"}
+QUEUE_TOKENS = {"--queue", "--q", "queue", "q"}
+
+
 
 if DEBUG:
     debug("Debug Mode ON")
@@ -200,6 +211,11 @@ async def play(ctx, *, content = None):
     else:
         await ctx.send("I'm not currently playing anything and there is nothing in the Queue. Type what you want to play!")
 
+async def play_from_ytID(ctx, yt_id):
+    await check_in_voice(ctx)
+    # dont want to increase counter in db
+    # song, created = Songs.save_song(yt_id)
+    await add_to_song_queue(ctx, yt_id)
 
 @bot.command(pass_context=True)
 async def pause(ctx):
@@ -352,5 +368,78 @@ async def error(ctx):
             user = bot.get_user(int(dev_id))
             await user.send(embed=embed)
         await ctx.send('Error reported.')
+
+def parse_top_args(args: list[str],
+                   valid_entities: set[str],
+                   default_count: int = 10
+                   ) -> Tuple[str, int, bool]:
+    """
+    Parse tokens after '!top' into (entity, count, queue_flag).
+    Accepts:
+      !top <EntityType> [Count] [--queue|--q|queue|q]
+    Examples:
+      !top songs 5 --queue
+      !top songs --q
+      !top commands
+    """
+    if not args:
+        raise ValueError("Missing <EntityType>.")
+
+    # entity
+    entity = args[0].lower()
+    if entity not in valid_entities:
+        raise ValueError(f"Unknown entity '{args[0]}'. Valid: {', '.join(sorted(valid_entities))}")
+
+    count: Optional[int] = None
+    queue_flag = False
+
+    # scan remaining args (order-agnostic for count vs flag)
+    for tok in args[1:]:
+        lt = tok.lower()
+        if lt in QUEUE_TOKENS:
+            queue_flag = True
+            continue
+        # numeric count
+        if count is None:
+            try:
+                c = int(tok)
+                if c <= 0:
+                    raise ValueError("Count must be a positive integer.")
+                count = c
+                continue
+            except ValueError:
+                # not an int → fall through to error below
+                pass
+        # if we reach here, unrecognized token
+        raise ValueError(f"Unrecognized argument '{tok}'. "
+                         f"Use a number for Count and/or --queue/--q.")
+
+    return entity, (count or default_count), queue_flag
+
+
+@bot.command(pass_context=True)
+async def top(ctx: commands.Context, *raw_args: str):
+    try:
+        entity, count, queue_flag = parse_top_args(list(raw_args), VALID_TOP_ENTITIES)
+    except ValueError as e:
+        return await ctx.send(
+            f"Usage: `!top <EntityType> [Count] [--queue|--q]`\n{e}"
+        )
+    
+    # Dispatch by entity
+    if entity == "songs":
+        songs = Songs.get_top_songs(count)
+        out = ""
+        for song in songs:
+            out += f"{song.title} - {song.plays_counter} plays\n"
+        await ctx.send(f"```Top Songs:\n{out}```")
+        if queue_flag:
+            for song in songs:
+                await play_from_ytID(ctx, song.id)
+    ### CAN ADD MORE LATER
+    else:
+        await ctx.send("Unknown type: " + entity)
+
+
 
 bot.run(token)

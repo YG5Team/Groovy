@@ -93,3 +93,7 @@ class Songs(BaseModel):
             song.save()
 
         return song, created
+
+    @classmethod
+    def get_top_songs(cls, limit=10):
+        return cls.select().order_by(cls.plays_counter.desc()).limit(limit)
