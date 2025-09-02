@@ -16,7 +16,7 @@ from bot_helpers import *
 
 load_dotenv()
 DEBUG = os.getenv("DEBUG") != '0'
-
+'''
 if DEBUG:
     print("Debug Mode ON")
 
@@ -29,6 +29,10 @@ if DEBUG:
 else:
     token = os.environ['TOKEN']
     bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
+'''
+token = os.environ['DEBUG_TOKEN'] if DEBUG else os.environ['TOKEN']
+bot = commands.Bot(command_prefix='$', intents=discord.Intents.all())
+
 
 songQueue = []
 
@@ -64,8 +68,8 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
     if DEBUG:
         embed.description = f"Traceback:\n```py\n{error_data[:1000]}\n```"
         await ctx.send(embed=embed)
-        print('Unknown Command')
-        #die()
+        print('Stopping Bot')
+        die()
     else:
         await ctx.send('❌ An Error has Occurred!💀\n Thanks ' + get_discord_tag() + '...')
 
