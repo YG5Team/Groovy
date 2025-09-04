@@ -16,9 +16,9 @@ from bot_helpers import *
 
 load_dotenv()
 DEBUG = os.getenv("DEBUG") != '0'
-'''
+
 if DEBUG:
-    print("Debug Mode ON")
+    debug("Debug Mode ON")
 
     logger = logging.getLogger('peewee')
     logger.addHandler(logging.StreamHandler())
@@ -29,19 +29,14 @@ if DEBUG:
 else:
     token = os.environ['TOKEN']
     bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
-'''
-token = os.environ['DEBUG_TOKEN'] if DEBUG else os.environ['TOKEN']
-bot = commands.Bot(command_prefix='$', intents=discord.Intents.all())
-
-
-songQueue = []
 
 def except_hook(exctype, value, traceback):
+    print('Trigger standard Exception Hook.')
     log_error([exctype, value])
     log_error(traceback)
     asyncio.get_event_loop().stop()
     if DEBUG:
-        print('Stopping Bot...')
+        debug('Stopping Bot...')
         die()
     else:
         print('Trigger standard Exception Hook.')
@@ -60,15 +55,15 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
         await ctx.send("Unknown command, type !help for known commands. ")
         return
 
+    GlobalSettings.LAST_ERROR = error
     error_type = type(error).__name__
     embed = discord.Embed(title=error_type, color=discord.Color.red())
-    error_data = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+    error_data = format_error(error)
     log_error(error_data)
-
     if DEBUG:
         embed.description = f"Traceback:\n```py\n{error_data[:1000]}\n```"
         await ctx.send(embed=embed)
-        print('Stopping Bot')
+        debug('Stopping Bot...')
         die()
     else:
         await ctx.send('❌ An Error has Occurred!💀\n Thanks ' + get_discord_tag() + '...')
@@ -76,17 +71,17 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
     if ctx.voice_client is not None:
         await ctx.voice_client.disconnect(force=True)
 
+    # await bot.on_command_error(ctx, error)
 
 @bot.event
 async def on_ready():
     init_logs()
     create_db()
-    global songQueue
     print('Connected to bot: {}'.format(bot.user.name))
     print('Bot ID: {}'.format(bot.user.id))
 
 
-# Dup commands still happening
+# Dup output still happening
 @bot.event
 async def on_message(message):
     try:
@@ -98,16 +93,16 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    if GlobalSettings.CURRENT_USER is None:
-        establish_globals(message.author)
-        for command in bot.commands:
-            if command.name == input_command:
-                command_count, created = CommandCount.get_or_create(command=input_command, user_id=GlobalSettings.CURRENT_USER.id , defaults={'counter': 1})
-                if not created:
-                    command_count.counter += 1
-                    command_count.date_last_action = datetime.now()
-                    command_count.save()
-                break
+    #Should always set
+    establish_globals(message.author)
+    for command in bot.commands:
+        if command.name == input_command:
+            command_count, created = CommandCount.get_or_create(command=input_command, user_id=GlobalSettings.CURRENT_USER.id , defaults={'counter': 1})
+            if not created:
+                command_count.counter += 1
+                command_count.date_last_action = datetime.now()
+                command_count.save()
+            break
 
     await bot.process_commands(message)
 

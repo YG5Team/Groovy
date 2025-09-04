@@ -16,7 +16,7 @@ def establish_globals(author):
 def get_discord_tag( discord_id = None ):
     if isinstance(discord_id, int):
         return "<@" + str(discord_id) + ">"
-    return"<@" + GlobalSettings.CURRENT_USER.discord_id + ">"
+    return"<@" + str(GlobalSettings.CURRENT_USER.discord_id) + ">"
 
 def play_next(ctx):
     SongQueue.pop()
@@ -63,4 +63,5 @@ async def add_youtube_playlist_to_queue(ctx, yt_playlist):
     songs = yt_playlist.get_songs()
 
     for song in songs:
+
         SongQueue.add_to_queue(song.id)
