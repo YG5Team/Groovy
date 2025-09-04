@@ -333,4 +333,29 @@ async def kys(ctx, content = None):
     #maybe play emote
     await ctx.send(message + "☠️💀 KILL YOUR SELF " + name + "!!! 💀☠️")
 
+@bot.command(pass_context=True)
+async def error(ctx):
+    if GlobalSettings.LAST_ERROR is None:
+        await ctx.send('No errors to report.')
+        return
+
+    last_error = GlobalSettings.LAST_ERROR
+
+    error_type = type(last_error).__name__
+    text = f'"{GlobalSettings.CURRENT_USER.name}" reported the following error: [{error_type}]'
+    embed = discord.Embed(title=text, color=discord.Color.red())
+    error_data = format_error(last_error)
+    embed.description = f"Traceback:\n```py\n{error_data[:2000]}\n```"
+
+    await ctx.send('Sending last error to key personnel.')
+    dev_list = os.getenv("ADMIN_LIST")
+    if dev_list is None:
+        await ctx.send('Key personnel IDs are not defined.')
+    else:
+        devs = dev_list.split(',')
+        for dev_id in devs:
+            user = bot.get_user(int(dev_id))
+            await user.send(embed=embed)
+        await ctx.send('Error reported.')
+
 bot.run(token)
