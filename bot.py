@@ -347,11 +347,11 @@ async def error(ctx):
     error_data = format_error(last_error)
     embed.description = f"Traceback:\n```py\n{error_data[:2000]}\n```"
 
-    await ctx.send('Sending last error to key personnel.')
     dev_list = os.getenv("ADMIN_LIST")
     if dev_list is None:
         await ctx.send('Key personnel IDs are not defined.')
     else:
+        await ctx.send('Sending last error to key personnel.')
         devs = dev_list.split(',')
         for dev_id in devs:
             user = bot.get_user(int(dev_id))
