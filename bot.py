@@ -37,8 +37,9 @@ def except_hook(exctype, value, traceback):
     asyncio.get_event_loop().stop()
     if DEBUG:
         debug('Stopping Bot...')
-        # die()
+        die()
     else:
+        print('Trigger standard Exception Hook.')
         sys.__excepthook__(exctype, value, traceback)
         print('Restarting bot...')
         # restart script
@@ -49,6 +50,11 @@ sys.excepthook = except_hook
 
 @bot.event
 async def on_command_error(ctx: commands.Context, error: commands.CommandError):
+
+    if isinstance(error, commands.CommandNotFound):
+        await ctx.send("Unknown command, type !help for known commands. ")
+        return
+
     GlobalSettings.LAST_ERROR = error
     error_type = type(error).__name__
     embed = discord.Embed(title=error_type, color=discord.Color.red())
@@ -58,7 +64,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
         embed.description = f"Traceback:\n```py\n{error_data[:1000]}\n```"
         await ctx.send(embed=embed)
         debug('Stopping Bot...')
-        # die()
+        die()
     else:
         await ctx.send('❌ An Error has Occurred!💀\n Thanks ' + get_discord_tag() + '...')
 
@@ -71,7 +77,6 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
 async def on_ready():
     init_logs()
     create_db()
-    global LAST_ERROR
     print('Connected to bot: {}'.format(bot.user.name))
     print('Bot ID: {}'.format(bot.user.id))
 
@@ -342,11 +347,11 @@ async def error(ctx):
     error_data = format_error(last_error)
     embed.description = f"Traceback:\n```py\n{error_data[:2000]}\n```"
 
-    await ctx.send('Sending last error to key personnel.')
     dev_list = os.getenv("ADMIN_LIST")
     if dev_list is None:
         await ctx.send('Key personnel IDs are not defined.')
     else:
+        await ctx.send('Sending last error to key personnel.')
         devs = dev_list.split(',')
         for dev_id in devs:
             user = bot.get_user(int(dev_id))
