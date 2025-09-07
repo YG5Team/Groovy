@@ -84,11 +84,10 @@ async def on_ready():
 # Dup output still happening
 @bot.event
 async def on_message(message):
-    try:
-        input_command = message.content.split()[0].strip(bot.command_prefix)
-    except IndexError:
-        print(message.content)
+    if not message.content.startswith(bot.command_prefix):
         return
+
+    input_command = message.content.split()[0].strip(bot.command_prefix)
 
     if message.author.bot:
         return
@@ -274,6 +273,7 @@ async def skip(ctx):
 @bot.command(pass_context=True)
 async def stop(ctx):
     if ctx.voice_client is not None:
+        SongQueue.clear()
         await ctx.voice_client.disconnect()
         await ctx.send('Disconnected from the voice channel.')
     else:
