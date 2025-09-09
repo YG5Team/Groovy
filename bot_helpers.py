@@ -4,6 +4,7 @@ import discord
 
 from models import *
 from helpers import *
+from typing import Tuple, Optional
 
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
@@ -65,3 +66,53 @@ async def add_youtube_playlist_to_queue(ctx, yt_playlist):
     for song in songs:
 
         SongQueue.add_to_queue(song.id)
+
+def parse_top_args(args: list[str],
+                   valid_entities: set[str],
+                   default_count: int = 10
+                   ) -> Tuple[str, int, bool]:
+    """
+    Parse tokens after '!top' into (entity, count, queue_flag).
+    Accepts:
+      !top <EntityType> [Count] [--queue|--q|queue|q]
+    Examples:
+      !top songs 5 --queue
+      !top songs --q
+      !top commands
+    """
+    if not args:
+        raise ValueError("Missing <EntityType>.")
+
+    QUEUE_TOKENS = {"--queue", "--q", "queue", "q"}
+
+    # entity
+    entity = args[0].lower()
+    if entity not in valid_entities:
+        raise ValueError(f"Unknown entity '{args[0]}'. Valid: {', '.join(sorted(valid_entities))}")
+
+    count: Optional[int] = None
+    queue_flag = False
+
+    # scan remaining args (order-agnostic for count vs flag)
+    for tok in args[1:]:
+        lt = tok.lower()
+        if lt in QUEUE_TOKENS:
+            queue_flag = True
+            continue
+        # numeric count
+        if count is None:
+            try:
+                c = int(tok)
+                if c <= 0:
+                    raise ValueError("Count must be a positive integer.")
+                count = c
+                continue
+            except ValueError:
+                # not an int → fall through to error below
+                pass
+        # if we reach here, unrecognized token
+        raise ValueError(f"Unrecognized argument '{tok}'. "
+                         f"Use a number for Count and/or --queue/--q.")
+
+    return entity, (count or default_count), queue_flag
+
