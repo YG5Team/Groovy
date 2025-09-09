@@ -41,8 +41,9 @@ def except_hook(exctype, value, traceback):
     asyncio.get_event_loop().stop()
     if DEBUG:
         debug('Stopping Bot...')
-        # die()
+        die()
     else:
+        print('Trigger standard Exception Hook.')
         sys.__excepthook__(exctype, value, traceback)
         print('Restarting bot...')
         # restart script
@@ -53,6 +54,11 @@ sys.excepthook = except_hook
 
 @bot.event
 async def on_command_error(ctx: commands.Context, error: commands.CommandError):
+
+    if isinstance(error, commands.CommandNotFound):
+        await ctx.send("Unknown command, type !help for known commands. ")
+        return
+
     GlobalSettings.LAST_ERROR = error
     error_type = type(error).__name__
     embed = discord.Embed(title=error_type, color=discord.Color.red())
@@ -62,7 +68,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
         embed.description = f"Traceback:\n```py\n{error_data[:1000]}\n```"
         await ctx.send(embed=embed)
         debug('Stopping Bot...')
-        # die()
+        die()
     else:
         await ctx.send('❌ An Error has Occurred!💀\n Thanks ' + get_discord_tag() + '...')
 
@@ -82,11 +88,10 @@ async def on_ready():
 # Dup output still happening
 @bot.event
 async def on_message(message):
-    try:
-        input_command = message.content.split()[0].strip(bot.command_prefix)
-    except IndexError:
-        print(message.content)
+    if not message.content.startswith(bot.command_prefix):
         return
+
+    input_command = message.content.split()[0].strip(bot.command_prefix)
 
     if message.author.bot:
         return
@@ -277,6 +282,7 @@ async def skip(ctx):
 @bot.command(pass_context=True)
 async def stop(ctx):
     if ctx.voice_client is not None:
+        SongQueue.clear()
         await ctx.voice_client.disconnect()
         await ctx.send('Disconnected from the voice channel.')
     else:
@@ -350,11 +356,11 @@ async def error(ctx):
     error_data = format_error(last_error)
     embed.description = f"Traceback:\n```py\n{error_data[:2000]}\n```"
 
-    await ctx.send('Sending last error to key personnel.')
     dev_list = os.getenv("ADMIN_LIST")
     if dev_list is None:
         await ctx.send('Key personnel IDs are not defined.')
     else:
+        await ctx.send('Sending last error to key personnel.')
         devs = dev_list.split(',')
         for dev_id in devs:
             user = bot.get_user(int(dev_id))
