@@ -1,13 +1,16 @@
+from __future__ import annotations
+
 import datetime
 import logging
-import traceback
-from discord.ext import commands
-import requests
 import xml.etree.ElementTree as ET
 
-from models.CommandCount import CommandCount
-from sqlite.database import *
+import requests
+from discord.ext import commands
+
 from bot_helpers import *
+from models.CommandCount import CommandCount
+from models.Songs import Songs
+from sqlite.database import create_db
 
 """
 @FIXME: ADDING TO QUEUE AND SONG SEARCHING NEED TO BE UPDATED TO A THREAD OR ASYNC
@@ -16,6 +19,7 @@ from bot_helpers import *
 
 load_dotenv()
 DEBUG = os.getenv("DEBUG") != '0'
+VALID_TOP_ENTITIES = {"songs"}
 
 if DEBUG:
     debug("Debug Mode ON")
@@ -204,6 +208,11 @@ async def play(ctx, *, content = None):
     else:
         await ctx.send("I'm not currently playing anything and there is nothing in the Queue. Type what you want to play!")
 
+async def play_from_ytID(ctx, yt_id):
+    await check_in_voice(ctx)
+    # don't want to increase counter in db
+    # song, created = Songs.save_song(yt_id)
+    await add_to_song_queue(ctx, yt_id)
 
 @bot.command(pass_context=True)
 async def pause(ctx):
@@ -357,5 +366,34 @@ async def error(ctx):
             user = bot.get_user(int(dev_id))
             await user.send(embed=embed)
         await ctx.send('Error reported.')
+
+@bot.command(pass_context=True)
+async def top(ctx: commands.Context, *raw_args: str):
+    try:
+        entity, count, queue_flag = parse_top_args(list(raw_args), VALID_TOP_ENTITIES)
+    except ValueError as e:
+        return await ctx.send(
+            f"Usage: `!top [Commands|Songs|Playlists|YTPlaylist] [Count] [--queue|--q]`\n{e}"
+        )
+    
+    # Dispatch by entity
+    match entity:
+        case 'commands':
+            await ctx.send(f"{entity} not yet implemented.")
+        case 'songs':
+            songs = Songs.get_top_songs(count)
+            out = ""
+            for song in songs:
+                out += f"{song.title} - {song.plays_counter} plays\n"
+            await ctx.send(f"```Top Songs:\n{out}```")
+            if queue_flag:
+                for song in songs:
+                    await play_from_ytID(ctx, song.id)
+        case 'playlists':
+            await ctx.send(f"{entity} not yet implemented.")
+        case 'ytplaylist':
+            await ctx.send(f"{entity} not yet implemented.")
+        case _:
+            await ctx.send("Unknown type: " + entity)
 
 bot.run(token)

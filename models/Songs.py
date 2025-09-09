@@ -20,19 +20,28 @@ class Songs(BaseModel):
     def get_decoded_url(self):
         return base64_decode(self.url)
 
-    def get_url(self):
+    def get_url(self, increase_counter=False):
         now = datetime.datetime.now()
+
         if (now - self.updated_at) > datetime.timedelta(hours=2):
             print('Refreshing Download URL for song: ' + str(self.id))
             results = Songs.search(self.title)
 
             url = base64_encode(results['url'])
+
+            if increase_counter:
+                self.plays_counter += 1
+
             self.title = results['title']
             self.url = url
             self.updated_at = datetime.datetime.now()
             self.save()
 
             return results['url']
+
+        elif increase_counter:
+            self.plays_counter += 1
+            self.save()
 
         return self.get_decoded_url()
 
@@ -93,3 +102,7 @@ class Songs(BaseModel):
             song.save()
 
         return song, created
+
+    @classmethod
+    def get_top_songs(cls, limit=10):
+        return cls.select().order_by(cls.plays_counter.desc()).limit(limit)
