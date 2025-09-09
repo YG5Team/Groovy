@@ -185,13 +185,15 @@ async def play(ctx, *, content = None):
         if ctx.voice_client is not None and ctx.voice_client.is_paused():
             ctx.voice_client.resume()
             await ctx.send('Resume playing track!')
+            return
 
-        song, created = Songs.save_song(content)
+        song, created = await Songs.save_song(content)
 
         if created:
             await ctx.send(f'Saved 🎶{song.title}🎶 to music library!📖')
 
         await add_to_song_queue(ctx, song.id)
+        return
 
     elif ctx.voice_client is not None and ctx.voice_client.is_paused():
         ctx.voice_client.resume()

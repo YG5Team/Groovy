@@ -22,11 +22,17 @@ class Songs(BaseModel):
 
     def get_url(self):
         now = datetime.datetime.now()
+
+        # If stale, refresh by calling async search
         if (now - self.updated_at) > datetime.timedelta(hours=2):
             print('Refreshing Download URL for song: ' + str(self.id))
-            results = Songs.search(self.title)
+            results = await Songs.search_async(self.title)  # <- async
 
             url = base64_encode(results['url'])
+
+            if increase_counter:
+                self.plays_counter += 1
+
             self.title = results['title']
             self.url = url
             self.updated_at = datetime.datetime.now()
@@ -34,7 +40,48 @@ class Songs(BaseModel):
 
             return results['url']
 
+        elif increase_counter:
+            self.plays_counter += 1
+            self.save()
+
         return self.get_decoded_url()
+
+    @classmethod
+    async def search_async(cls, content: str):
+        """Async wrapper that offloads VideosSearch + yt_dlp to a thread."""
+        def _blocking_search():
+            # VideosSearch is blocking
+            video_search = VideosSearch(content, limit=1).result()
+            link = None
+
+            # your existing fallback logic
+            if 'result' in video_search and video_search['result']:
+                first = video_search['result'][0]
+                link = first.get('link') or first.get('url')
+
+            if not link:
+                raise AttributeError("No link found in search result")
+
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'quiet': True,
+                'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+                'nocheckcertificate': True,
+                'noplaylist': True,
+                'prefer_ffmpeg': True,
+                # NOTE: you were postprocessing to MP3; for streaming to Discord
+                # we generally don't need to transcode here. Keep download=False.
+                # If you truly need MP3 URLs, keep postprocessors, but it’s slower.
+                # 'postprocessors': [...]
+            }
+            if DEBUG:
+                ydl_opts['cachedir'] = False
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(link, download=False)
+            return info
+
+        return await asyncio.to_thread(_blocking_search)
 
     @classmethod
     def search(cls, content):
@@ -75,15 +122,18 @@ class Songs(BaseModel):
     """
     @classmethod
     def save_song(cls, content):
-        results = cls.search(content)
-
+        """Async version of save_song that uses search_async."""
+        results = await cls.search_async(content)
         url = base64_encode(results['url'])
 
-        song, created = cls.get_or_create(search_id=results['id'], defaults={
-            'title': results['title'],
-            'created_by': GlobalSettings.CURRENT_USER.id,
-            'url': url,
-        })
+        song, created = cls.get_or_create(
+            search_id=results['id'],
+            defaults={
+                'title': results['title'],
+                'created_by': GlobalSettings.CURRENT_USER.id,
+                'url': url,
+            }
+        )
 
         # we have to update the URL as the saved one could be expired
         if not created:

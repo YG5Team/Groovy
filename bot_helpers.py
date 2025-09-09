@@ -18,7 +18,7 @@ def get_discord_tag( discord_id = None ):
         return "<@" + str(discord_id) + ">"
     return"<@" + str(GlobalSettings.CURRENT_USER.discord_id) + ">"
 
-def play_next(ctx):
+async def play_next(ctx):
     SongQueue.pop()
     if SongQueue.queue_length() > 0:
         # if there are songs in the queue, play the next one
@@ -26,30 +26,41 @@ def play_next(ctx):
         if next_song is not None:
             song = Songs.get_by_id(next_song.song)
             GlobalSettings.CURRENT_SONG = song
-            url = song.get_url()
-            ctx.voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+            url = await song.get_url()
+            source = discord.FFmpegOpusAudio(url, **FFMPEG_OPTIONS)
+            ctx.voice_client.play(source, after=_after_factory(ctx))
     else:
-        ctx.voice_client.disconnect()
-        ctx.send('Disconnected from the voice channel.')
+        await ctx.voice_client.disconnect()
+        await ctx.send('Disconnected from the voice channel.')
+
+
+def _after_factory(ctx):
+    def _after_playing(error):
+        # hop back to the bot loop safely
+        try:
+            asyncio.run_coroutine_threadsafe(play_next(ctx), ctx.bot.loop)
+        except Exception:
+            pass
+    return _after_playing
 
 async def play_queue(ctx):
     first_song = SongQueue.get_first_song()
     if first_song is not None:
         song = Songs.get_by_id(first_song.song)
         GlobalSettings.CURRENT_SONG = song
-        url = song.get_url()
-        ctx.voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+        url = await song.get_url()
+        source = discord.FFmpegOpusAudio(url, **FFMPEG_OPTIONS)
+        ctx.voice_client.play(source, after=_after_factory(ctx))
         await ctx.send(f'Playing {song.title} from Queue! 🎶')
 
 async def add_to_song_queue(ctx, song_id: int):
-
     song, play_now = SongQueue.add_to_queue(song_id)
 
-    # If there is only one song in the queue and no song is playing, play the song immediately
     if SongQueue.queue_length() == 1 and not ctx.voice_client.is_playing():
         GlobalSettings.CURRENT_SONG = song
-        url = song.get_url()
-        ctx.voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+        url = await song.get_url_(True)  # ASYNC
+        source = discord.FFmpegOpusAudio(url, **FFMPEG_OPTIONS)
+        ctx.voice_client.play(source, after=_after_factory(ctx))
         await ctx.send(f'Playing {song.title}! 🎶')
     else:
         await ctx.send(f'Added {song.title} to the queue! 🎶')
