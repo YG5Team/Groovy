@@ -19,6 +19,48 @@ def get_discord_tag( discord_id = None ):
         return "<@" + str(discord_id) + ">"
     return"<@" + str(GlobalSettings.CURRENT_USER.discord_id) + ">"
 
+async def ensure_voice(ctx) -> discord.VoiceClient | None:
+    """Return an active VoiceClient for this ctx, connecting to the author's channel if needed.
+       Returns None if we couldn't get/connect a voice client."""
+    # Already have a voice client
+    if ctx.voice_client:
+        return ctx.voice_client
+
+    # Author must be in a voice channel for us to join them
+    author_channel = getattr(ctx.author, "voice", None)
+    if not author_channel or not getattr(author_channel, "channel", None):
+        await ctx.send("You need to be in a voice channel for me to join.")
+        return None
+
+    channel = author_channel.channel
+
+    # Check bot permissions for connecting/speaking
+    perms = channel.permissions_for(ctx.me)
+    if not perms.connect:
+        await ctx.send("I don't have permission to connect to your voice channel.")
+        return None
+    if not perms.speak:
+        await ctx.send("I don't have permission to speak in that voice channel.")
+        return None
+
+    try:
+        vc = await channel.connect()
+        return vc
+    except Exception as e:
+        await ctx.send(f"Failed to connect to voice channel: {e}")
+        return None
+
+def _play_after_callback(ctx, exc):
+    """Used when vc.play(..., after=...) is required to schedule an async coroutine."""
+    # If play_next is async, schedule it on the bot loop
+    try:
+        # play_next(ctx) is expected to be async; schedule it
+        asyncio.run_coroutine_threadsafe(play_next(ctx), ctx.bot.loop)
+    except Exception as e:
+        # fallback: log to console
+        print("Error scheduling play_next:", e)
+
+
 def play_next(ctx):
     SongQueue.pop()
     if SongQueue.queue_length() > 0:
@@ -43,17 +85,30 @@ async def play_queue(ctx):
         await ctx.send(f'Playing {song.title} from Queue! 🎶')
 
 async def add_to_song_queue(ctx, song_id: int):
-
     song, play_now = SongQueue.add_to_queue(song_id)
 
-    # If there is only one song in the queue and no song is playing, play the song immediately
-    if SongQueue.queue_length() == 1 and not ctx.voice_client.is_playing():
-        GlobalSettings.CURRENT_SONG = song
-        url = song.get_url(True)
-        ctx.voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
-        await ctx.send(f'Playing {song.title}! 🎶')
-    else:
-        await ctx.send(f'Added {song.title} to the queue! 🎶')
+    # Ensure we have a voice client before we call is_playing()
+    vc = ctx.voice_client
+    if vc is None:
+        vc = await ensure_voice(ctx)
+        if vc is None:
+            # Couldn't connect - we already informed the user inside ensure_voice
+            return
+
+    # safe: vc is a VoiceClient instance
+    try:
+        # SongQueue.queue_length() == 1 -> only this song in DB queue
+        if SongQueue.queue_length() == 1 and not vc.is_playing():
+            GlobalSettings.CURRENT_SONG = song
+            url = song.get_url(True)
+            # If play_next is async we schedule it via _play_after_callback
+            vc.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS), after=lambda e: _play_after_callback(ctx, e))
+            await ctx.send(f'Playing {song.title}! 🎶')
+        else:
+            await ctx.send(f'Added {song.title} to the queue! 🎶')
+    except Exception as e:
+        await ctx.send(f"Error while starting playback: {e}")
+        print("Playback error:", e)
 
 async def add_youtube_playlist_to_queue(ctx, yt_playlist):
 
