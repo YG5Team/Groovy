@@ -132,3 +132,20 @@ async def increment_song_play_count(song_id: Optional[int]) -> Optional[int]:
             await cur.execute("SELECT play_count FROM songs WHERE id = %s", (song_id,))
             row = await cur.fetchone()
             return int(row[0]) if row else None
+
+async def get_top_songs(limit: int) -> list[tuple[str, str, int]]:
+    if not is_enabled():
+        return []
+    assert _pool is not None
+    limit = max(1, min(int(limit), 100))
+    sql = """
+        SELECT title, play_count, webpage_url
+        FROM songs
+        ORDER BY play_count DESC, id DESC
+        LIMIT %s
+    """
+    async with _pool.acquire() as conn:  # type: ignore
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (limit,))
+            rows = await cur.fetchall()
+            return [(r[0], int(r[1]), r[2]) for r in rows]
