@@ -90,8 +90,34 @@ async def stop(ctx: commands.Context):
 
 @bot.command(name="queue", help="Show the current queue.")
 async def queue(ctx: commands.Context):
-    # Example: !queue
-    await ctx.send("Not implemented yet.")
+    gm = get_guild_music(ctx.guild)
+    now = gm.now_playing
+    # Snapshot pending items without consuming the queue
+    pending = list(gm.queue._queue)  # type: ignore[attr-defined]
+
+    if not now and not pending:
+        await ctx.send("Queue is empty.")
+        return
+
+    lines = []
+    if now:
+        lines.append(f"Now playing: {now.title}")
+
+    if pending:
+        for i, t in enumerate(pending, start=1):
+            lines.append(f"{i}. {t.title}")
+
+    # Send in chunks to respect Discord's 2000 character limit
+    MAX = 2000
+    buf = ""
+    for line in lines:
+        if len(buf) + len(line) + 1 > MAX:
+            await ctx.send(buf)
+            buf = line
+        else:
+            buf = f"{buf}\n{line}" if buf else line
+    if buf:
+        await ctx.send(buf)
 
 @bot.command(name="lyrics", help="Fetch lyrics for the currently playing song.")
 async def lyrics(ctx: commands.Context):
