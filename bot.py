@@ -14,6 +14,7 @@ from db import (
     close_pool,
     upsert_song,
     is_enabled as db_enabled,
+    get_top_songs,
 )
 from bot_helpers import fetch_track, get_guild_music
 from music import Track
@@ -26,7 +27,7 @@ log = logging.getLogger("groovy")
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="$", intents=intents)
 
 
 @bot.event
@@ -129,10 +130,67 @@ async def kys(ctx: commands.Context):
     # Example: !kys @user
     await ctx.send("Not implemented yet.")
 
-@bot.command(name="top", help="Show top played songs. Usage: !top songs <N>")
-async def top(ctx: commands.Context):
-    # Example: !top songs 10
-    await ctx.send("Not implemented yet.")
+@bot.command(name="top", help="Show top played songs. Usage: !top songs <N> Optional:[q|queue]")
+async def top(ctx: commands.Context, n: Optional[int] = 10, queue: Optional[str] = None):
+    if not db_enabled():
+        await ctx.send("Database not configured.")
+        return
+
+    try:
+        rows = await get_top_songs(n)
+    except Exception:
+        log.exception("Failed to fetch top songs")
+        await ctx.send("Failed to fetch top songs.")
+        return
+
+    if not rows:
+        await ctx.send("No song stats available.")
+        return
+
+    lines = []
+    for i, (title, plays, webpage_url) in enumerate(rows, start=1):
+        lines.append(f"{i}. {title} — {plays} plays")
+
+    # Send in chunks to respect Discord's 2000 character limit
+    MAX = 2000
+    buf = ""
+    for line in lines:
+        if len(buf) + len(line) + 1 > MAX:
+            await ctx.send(buf)
+            buf = line
+        else:
+            buf = f"{buf}\n{line}" if buf else line
+    if buf:
+        await ctx.send(buf)
+
+    if queue:
+        gm = get_guild_music(ctx.guild)
+        gm.text_channel = ctx.channel
+        try:
+            vc = await gm.ensure_voice(ctx)
+        except commands.CommandError as e:
+            await ctx.send(str(e))
+            return
+
+        queued = 0
+        try:
+            async with ctx.typing():
+                for row in rows:
+                    title = row[0]  # title is the first element
+                    try:
+                        track = await fetch_track(title)
+                        await gm.queue.put(track)
+                        queued += 1
+                    except Exception:
+                        log.exception("Failed to fetch track for title: %s", title)
+            if queued:
+                await ctx.send(f"Queued top {queued} songs.")
+                gm.start_player_if_needed(vc)
+            else:
+                await ctx.send("No songs queued.")
+        except Exception:
+            log.exception("Failed to queue top songs")
+            await ctx.send("Failed to queue top songs.")
 
 # catch all for unknown commands and errors
 @bot.event
