@@ -19,6 +19,8 @@ from db import (
 from bot_helpers import fetch_track, get_guild_music
 from music import Track
 
+from aiohttp import web
+
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
@@ -200,12 +202,33 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
     else:
         log.error("Command error: %s", error)
 
-def main():
+async def handle_embed_request(request):
+    data = await request.json()
+    channel_id = int(data["channel_id"])
+    embed_data = data["embed"]
+    
+    embed = discord.Embed.from_dict(embed_data)
+    channel = bot.get_channel(channel_id)
+    if channel:
+        await channel.send(embed=embed)
+        return web.Response(text="Embed sent!")
+    return web.Response(status=404, text="Channel not found")
+
+async def run_webserver():
+    app = web.Application()
+    app.add_routes([web.post('/send_embed', handle_embed_request)])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '127.0.0.1', 8080)
+    await site.start()
+
+
+async def main():
     token = os.getenv("DEBUG_TOKEN")
     if not token:
         raise SystemExit("Set DEBUG_TOKEN environment variable.")
     try:
-        bot.run(token)
+        await asyncio.gather(bot.start(token), run_webserver())
     finally:
         # Ensure DB pool closes on shutdown
         try:
@@ -218,4 +241,4 @@ def main():
             pass
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
