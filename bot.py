@@ -214,9 +214,21 @@ async def handle_embed_request(request):
         return web.Response(text="Embed sent!")
     return web.Response(status=404, text="Channel not found")
 
+async def handle_message_request(request):
+    data = await request.json()
+    channel_id = int(data["channel_id"])
+    message_content = data["message"]
+    
+    channel = bot.get_channel(channel_id)
+    if channel:
+        await channel.send(message_content)
+        return web.Response(text="Message sent!")
+    return web.Response(status=404, text="Channel not found")
+
 async def run_webserver():
     app = web.Application()
     app.add_routes([web.post('/send_embed', handle_embed_request)])
+    app.add_routes([web.post('/send_message', handle_message_request)])
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '127.0.0.1', 8080)
