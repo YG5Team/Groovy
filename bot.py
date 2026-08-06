@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import asyncio
 import logging
 from typing import Optional, Dict
@@ -19,9 +20,22 @@ from db import (
 from bot_helpers import fetch_track, get_guild_music
 from music import Track
 
+import aiohttp
 from aiohttp import web
 
 load_dotenv()
+
+# Where this bot's own web server binds. Loopback unless told otherwise.
+GROOVY_HOST = os.getenv("GROOVY_HOST", "127.0.0.1")
+GROOVY_PORT = int(os.getenv("GROOVY_PORT", "8080"))
+
+# Where the DiscordChannelWatcher's inbound server is listening.
+WATCHER_URL = os.getenv("WATCHER_URL", "http://127.0.0.1:8090").rstrip("/")
+
+# Forwarded role mentions get rewritten to this role. Set the ID to be explicit,
+# otherwise it's looked up by name in the destination guild.
+POKEMON_ROLE_ID = os.getenv("POKEMON_ROLE_ID", "")
+POKEMON_ROLE_NAME = os.getenv("POKEMON_ROLE_NAME", "pokemon")
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("groovy")
@@ -202,15 +216,97 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
     else:
         log.error("Command error: %s", error)
 
+@bot.command(name="testEmbed", help="Ask the watcher for sample embeds. Usage: !testEmbed [count]")
+async def test_embed(ctx: commands.Context, count: Optional[int] = 5):
+    count = max(1, min(count, 25))
+    payload = {"channel_id": ctx.channel.id, "limit": count}
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(f"{WATCHER_URL}/test_embed", json=payload) as resp:
+                body = await resp.text()
+                if resp.status != 200:
+                    await ctx.send(f"Watcher returned {resp.status}: {body[:1500]}")
+                    return
+                data = await resp.json(content_type=None)
+    except asyncio.TimeoutError:
+        await ctx.send("Watcher timed out.")
+        return
+    except aiohttp.ClientError as e:
+        log.exception("testEmbed request failed")
+        await ctx.send(f"Could not reach the watcher at {WATCHER_URL} ({e.__class__.__name__}).")
+        return
+
+    messages = data.get("messages", 0)
+    if not messages:
+        await ctx.send("Watcher found no messages in the test channel.")
+        return
+    await ctx.send(f"Watcher forwarded {messages} message(s), {data.get('embeds', 0)} embed(s).")
+
+
+# Role mentions arrive with the *source* server's role IDs, which mean nothing
+# here — rewrite them all to our own pokemon role.
+ROLE_MENTION_RE = re.compile(r"<@&(\d+)>")
+
+
+def pokemon_role_id(channel) -> Optional[int]:
+    """Resolve our pokemon role: explicit ID from env, else by name in the
+    destination channel's guild."""
+    if POKEMON_ROLE_ID:
+        return int(POKEMON_ROLE_ID)
+
+    guild = getattr(channel, "guild", None)
+    if guild is None:
+        return None
+    role = discord.utils.find(
+        lambda r: r.name.lower() == POKEMON_ROLE_NAME.lower(), guild.roles
+    )
+    if role is None:
+        log.warning(
+            "No role named %r in guild %s and POKEMON_ROLE_ID is unset — "
+            "leaving role mentions as-is", POKEMON_ROLE_NAME, guild.id
+        )
+        return None
+    return role.id
+
+
+def rewrite_role_mentions(text, channel):
+    """Point every <@&...> at our pokemon role."""
+    if not text or not isinstance(text, str):
+        return text
+    role_id = pokemon_role_id(channel)
+    if role_id is None:
+        return text
+    return ROLE_MENTION_RE.sub(f"<@&{role_id}>", text)
+
+
+def rewrite_embed_role_mentions(embed_data, channel):
+    """Same rewrite, applied to every string in the embed payload —
+    description, field names/values, footer, author, and so on."""
+    if isinstance(embed_data, dict):
+        return {k: rewrite_embed_role_mentions(v, channel) for k, v in embed_data.items()}
+    if isinstance(embed_data, list):
+        return [rewrite_embed_role_mentions(v, channel) for v in embed_data]
+    return rewrite_role_mentions(embed_data, channel)
+
+
+# Let the rewritten role ping, but never let a forwarded @everyone/@here or a
+# stray user mention from the source server fire in ours.
+FORWARD_MENTIONS = discord.AllowedMentions(
+    everyone=False, users=False, roles=True, replied_user=False
+)
+
+
 async def handle_embed_request(request):
     data = await request.json()
     channel_id = int(data["channel_id"])
     embed_data = data["embed"]
-    
-    embed = discord.Embed.from_dict(embed_data)
+
     channel = bot.get_channel(channel_id)
     if channel:
-        await channel.send(embed=embed)
+        embed = discord.Embed.from_dict(rewrite_embed_role_mentions(embed_data, channel))
+        await channel.send(embed=embed, allowed_mentions=FORWARD_MENTIONS)
         return web.Response(text="Embed sent!")
     return web.Response(status=404, text="Channel not found")
 
@@ -218,10 +314,11 @@ async def handle_message_request(request):
     data = await request.json()
     channel_id = int(data["channel_id"])
     message_content = data["message"]
-    
+
     channel = bot.get_channel(channel_id)
     if channel:
-        await channel.send(message_content)
+        message_content = rewrite_role_mentions(message_content, channel)
+        await channel.send(message_content, allowed_mentions=FORWARD_MENTIONS)
         return web.Response(text="Message sent!")
     return web.Response(status=404, text="Channel not found")
 
@@ -231,8 +328,11 @@ async def run_webserver():
     app.add_routes([web.post('/send_message', handle_message_request)])
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '127.0.0.1', 8080)
+    # Loopback by default so the bare-metal/systemd deploy stays off the LAN.
+    # Compose sets GROOVY_HOST=0.0.0.0 so sibling containers can reach it.
+    site = web.TCPSite(runner, GROOVY_HOST, GROOVY_PORT)
     await site.start()
+    log.info("Web server listening on %s:%s", GROOVY_HOST, GROOVY_PORT)
 
 
 async def main():

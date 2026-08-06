@@ -1,7 +1,22 @@
+# Secrets must never enter the build context — docker-image.yml publishes this
+# image to Docker Hub, and anything COPYied in stays readable in the layer.
+.env
+.env.*
+*.log
+
 docker-compose.yml
 Dockerfile
-venv
-.venv
 .dockerignore
 .gitignore
 README.MD
+
+.git
+env
+venv
+.venv
+.idea
+__pycache__
+**/__pycache__
+*.pyc
+tmp
+sqlite
